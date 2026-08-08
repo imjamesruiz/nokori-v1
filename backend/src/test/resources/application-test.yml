@@ -1,0 +1,21 @@
+spring:
+  datasource:
+    url: ${NOKORI_TEST_DB_URL:jdbc:postgresql://localhost:5432/nokori_test}
+    username: ${NOKORI_TEST_DB_USER:${USER:postgres}}
+    password: ${NOKORI_TEST_DB_PASSWORD:}
+  flyway:
+    clean-disabled: false
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+nokori:
+  jwt:
+    secret: test-secret-test-secret-test-secret-0123456789
+    access-token-minutes: 60
+    refresh-token-days: 30
+
+logging:
+  level:
+    app.nokori: INFO
+    org.hibernate.SQL: WARN
