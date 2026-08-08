@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: nokori
+          POSTGRES_PASSWORD: nokori
+          POSTGRES_DB: nokori_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Test
+        working-directory: backend
+        env:
+          NOKORI_TEST_DB_URL: jdbc:postgresql://localhost:5432/nokori_test
+          NOKORI_TEST_DB_USER: nokori
+          NOKORI_TEST_DB_PASSWORD: nokori
+        run: mvn -B verify
+
+      - name: Build image
+        working-directory: backend
+        run: docker build -t nokori-api:${{ github.sha }} .
+
+  mobile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck
