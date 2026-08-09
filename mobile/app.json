@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Nokori",
+    "slug": "nokori",
+    "scheme": "nokori",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2F6B4F"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.nokori.mobile"
+    },
+    "android": {
+      "package": "app.nokori.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#2F6B4F",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ],
+    "extra": {
+      "apiBaseUrl": "http://localhost:8080"
+    }
+  }
+}
