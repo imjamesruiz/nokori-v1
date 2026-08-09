@@ -1,17 +1,19 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { RefreshControl, StyleSheet, Text } from 'react-native';
 
 import { useInventory } from '@/api/hooks';
 import type { InventoryItem } from '@/api/types';
-import { Button, Card, EmptyState, Loading, Screen, SectionTitle } from '@/components/ui';
+import { Button, Card, EmptyState, Loading, Row, Screen, Section } from '@/components/ui';
 import { money, titleCase, unitLabel } from '@/format';
-import { colors, spacing, type } from '@/theme';
+import { useTheme } from '@/theme';
 
-/** Inventory (PRD F-003): the item list the log screen picks from, grouped by category. */
+/** Inventory (PRD F-003): the list the log screen picks from, grouped by category. */
 export default function Inventory() {
   const router = useRouter();
   const { data, isPending, refetch, isRefetching } = useInventory(true);
+  const t = useTheme();
+  const own = useOwnStyles();
 
   if (isPending) return <Loading />;
 
@@ -25,10 +27,12 @@ export default function Inventory() {
   }, {});
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
-      <Button title="Add item" onPress={() => router.push('/item-editor')} />
-
-      {active.length === 0 && (
+    <Screen
+      refreshControl={
+        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />
+      }
+      floatingAction={<Button title="Add item" size="lg" pill onPress={() => router.push('/item-editor')} />}>
+      {active.length === 0 && inactive.length === 0 && (
         <EmptyState
           title="No items yet"
           body="Add the things you throw away most — that's all Nokori needs to price your waste."
@@ -36,76 +40,49 @@ export default function Inventory() {
       )}
 
       {Object.entries(grouped).map(([category, categoryItems]) => (
-        <View key={category} style={styles.group}>
-          <SectionTitle>{titleCase(category)}</SectionTitle>
-          <Card style={styles.listCard}>
+        <Section key={category} title={titleCase(category)}>
+          <Card>
             {categoryItems.map((item, index) => (
-              <ItemRow
+              <Row
                 key={item.id}
-                item={item}
-                divider={index > 0}
+                first={index === 0}
+                label={item.name}
+                meta={`per ${unitLabel(item.unit)}`}
+                value={money(item.costPerUnit)}
                 onPress={() => router.push({ pathname: '/item-editor', params: { id: item.id } })}
               />
             ))}
           </Card>
-        </View>
+        </Section>
       ))}
 
       {inactive.length > 0 && (
-        <View style={styles.group}>
-          <SectionTitle>No longer tracked</SectionTitle>
-          <Text style={styles.inactiveNote}>
-            These stay in your history and reports, but can't be logged against.
-          </Text>
-          <Card style={styles.listCard}>
+        <Section title="No longer tracked">
+          <Card>
             {inactive.map((item, index) => (
-              <ItemRow
+              <Row
                 key={item.id}
-                item={item}
-                divider={index > 0}
+                first={index === 0}
+                label={item.name}
+                meta={`per ${unitLabel(item.unit)}`}
+                value={money(item.costPerUnit)}
                 onPress={() => router.push({ pathname: '/item-editor', params: { id: item.id } })}
               />
             ))}
           </Card>
-        </View>
+          <Text style={own.note}>
+            These stay in your history and reports, but can't be logged against.
+          </Text>
+        </Section>
       )}
     </Screen>
   );
 }
 
-function ItemRow({
-  item,
-  divider,
-  onPress,
-}: {
-  item: InventoryItem;
-  divider: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, divider && styles.rowDivider, pressed && styles.rowPressed]}>
-      <View style={styles.rowMain}>
-        <Text style={[styles.rowName, !item.active && styles.rowNameInactive]}>{item.name}</Text>
-        <Text style={styles.rowMeta}>per {unitLabel(item.unit)}</Text>
-      </View>
-      <Text style={styles.rowCost}>{money(item.costPerUnit)}</Text>
-    </Pressable>
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () => StyleSheet.create({ note: { ...t.text.caption, color: t.colors.inkFaint } }),
+    [t],
   );
 }
-
-const styles = StyleSheet.create({
-  group: { gap: spacing.sm },
-  listCard: { gap: 0, paddingVertical: spacing.xs },
-  inactiveNote: { ...type.caption, color: colors.inkMuted },
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, gap: spacing.md },
-  rowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
-  rowPressed: { opacity: 0.6 },
-  rowMain: { flex: 1, gap: 2 },
-  rowName: { ...type.body, color: colors.ink, fontWeight: '600' },
-  rowNameInactive: { color: colors.inkFaint },
-  rowMeta: { ...type.caption, color: colors.inkMuted },
-  rowCost: { ...type.heading, color: colors.ink, fontVariant: ['tabular-nums'] },
-});

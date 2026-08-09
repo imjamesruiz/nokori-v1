@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ApiError } from '@/api/client';
@@ -8,7 +8,7 @@ import { ITEM_CATEGORIES, ITEM_UNITS, type ItemCategory, type ItemUnit } from '@
 import { Banner, Button, ChipRow, Field } from '@/components/ui';
 import { titleCase, unitLabel } from '@/format';
 import { dismissModal } from '@/navigation';
-import { colors, spacing, type } from '@/theme';
+import { useTheme } from '@/theme';
 
 const CATEGORY_OPTIONS = ITEM_CATEGORIES.map((value) => ({ value, label: titleCase(value) }));
 const UNIT_OPTIONS = ITEM_UNITS.map((value) => ({ value, label: unitLabel(value) }));
@@ -20,6 +20,7 @@ export default function ItemEditor() {
   const { data: items } = useInventory(true);
   const saveItem = useSaveItem();
   const deleteItem = useDeleteItem();
+  const own = useOwnStyles();
 
   const existing = items?.find((item) => item.id === id);
 
@@ -87,7 +88,7 @@ export default function ItemEditor() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+    <ScrollView contentContainerStyle={own.content} keyboardShouldPersistTaps="handled">
       {!!error && <Banner tone="error">{error}</Banner>}
 
       <Field
@@ -99,13 +100,13 @@ export default function ItemEditor() {
         error={fieldErrors.name}
       />
 
-      <View style={styles.group}>
-        <Text style={styles.groupLabel}>Category</Text>
+      <View style={own.group}>
+        <Text style={own.groupLabel}>Category</Text>
         <ChipRow options={CATEGORY_OPTIONS} value={category} onChange={setCategory} />
       </View>
 
-      <View style={styles.group}>
-        <Text style={styles.groupLabel}>Unit you count it in</Text>
+      <View style={own.group}>
+        <Text style={own.groupLabel}>Unit you count it in</Text>
         <ChipRow options={UNIT_OPTIONS} value={unit} onChange={setUnit} />
       </View>
 
@@ -121,32 +122,48 @@ export default function ItemEditor() {
 
       {!!existing && (
         <Banner tone="info">
-          Changing the cost only affects future entries. Past entries keep the cost they were logged
-          with.
+          Changing the cost only affects future entries. Past entries keep the cost they were
+          logged with.
         </Banner>
       )}
 
-      <Button
-        title={existing ? 'Save changes' : 'Add item'}
-        onPress={submit}
-        loading={saveItem.isPending}
-        disabled={name.trim().length === 0 || costPerUnit.length === 0}
-      />
-      {!!existing && (
+      <View style={own.actions}>
         <Button
-          title="Remove item"
-          variant="danger"
-          onPress={confirmDelete}
-          loading={deleteItem.isPending}
+          title={existing ? 'Save changes' : 'Add item'}
+          size="lg"
+          onPress={submit}
+          loading={saveItem.isPending}
+          disabled={name.trim().length === 0 || costPerUnit.length === 0}
         />
-      )}
-      <Button title="Cancel" variant="ghost" onPress={() => dismissModal(router)} />
+        {!!existing && (
+          <Button
+            title="Remove item"
+            variant="quiet"
+            onPress={confirmDelete}
+            loading={deleteItem.isPending}
+          />
+        )}
+        <Button title="Cancel" variant="quiet" onPress={() => dismissModal(router)} />
+      </View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: spacing.lg, gap: spacing.md, backgroundColor: colors.mist, paddingBottom: spacing.xxl },
-  group: { gap: spacing.sm },
-  groupLabel: { ...type.label, color: colors.inkMuted },
-});
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        content: {
+          padding: t.space.lg,
+          gap: t.space.xl,
+          backgroundColor: t.colors.canvas,
+          paddingBottom: t.space.xxxl,
+        },
+        group: { gap: t.space.sm },
+        groupLabel: { ...t.text.label, color: t.colors.inkMuted },
+        actions: { gap: t.space.sm, marginTop: t.space.sm },
+      }),
+    [t],
+  );
+}

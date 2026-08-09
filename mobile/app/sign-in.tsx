@@ -1,15 +1,17 @@
 import { Link, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 
-import { ApiError, API_BASE_URL } from '@/api/client';
-import { Banner, Button, Field, Screen } from '@/components/ui';
+import { API_BASE_URL, ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthContext';
-import { colors, spacing, type } from '@/theme';
+import { Banner, Button, Field, Screen } from '@/components/ui';
+import { useTheme } from '@/theme';
 
 export default function SignIn() {
   const { signIn } = useAuth();
   const router = useRouter();
+  const own = useOwnStyles();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -32,10 +34,10 @@ export default function SignIn() {
     <Screen>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.form}>
-        <View style={styles.header}>
-          <Text style={styles.wordmark}>nokori</Text>
-          <Text style={styles.tagline}>See what your waste costs. Prep smarter next week.</Text>
+        style={own.form}>
+        <View style={own.header}>
+          <Text style={own.wordmark}>nokori</Text>
+          <Text style={own.tagline}>See what your waste costs. Prep smarter next week.</Text>
         </View>
 
         {!!error && <Banner tone="error">{error}</Banner>}
@@ -62,24 +64,31 @@ export default function SignIn() {
           returnKeyType="go"
         />
 
-        <Button title="Log in" onPress={submit} loading={busy} />
+        <Button title="Log in" size="lg" onPress={submit} loading={busy} />
 
-        <Link href="/sign-up" style={styles.link}>
-          <Text style={styles.linkText}>New to Nokori? Create an account</Text>
+        <Link href="/sign-up" style={own.link}>
+          <Text style={own.linkText}>New to Nokori? Create an account</Text>
         </Link>
 
-        <Text style={styles.apiHint}>API: {API_BASE_URL}</Text>
+        <Text style={own.api}>{API_BASE_URL}</Text>
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  form: { gap: spacing.md },
-  header: { gap: spacing.xs, paddingVertical: spacing.xl },
-  wordmark: { ...type.display, color: colors.green },
-  tagline: { ...type.body, color: colors.inkMuted },
-  link: { alignSelf: 'center', paddingVertical: spacing.md },
-  linkText: { ...type.body, color: colors.green, fontWeight: '600' },
-  apiHint: { ...type.caption, color: colors.inkFaint, textAlign: 'center' },
-});
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        form: { gap: t.space.lg },
+        header: { gap: t.space.sm, paddingTop: t.space.xxxl, paddingBottom: t.space.lg },
+        wordmark: { ...t.text.display, color: t.colors.brand, letterSpacing: -2 },
+        tagline: { ...t.text.body, color: t.colors.inkMuted, maxWidth: 260 },
+        link: { alignSelf: 'center', paddingVertical: t.space.sm },
+        linkText: { ...t.text.bodyStrong, color: t.colors.brand },
+        api: { ...t.text.caption, color: t.colors.inkFaint, textAlign: 'center' },
+      }),
+    [t],
+  );
+}

@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ApiError } from '@/api/client';
@@ -7,7 +7,7 @@ import { useCreateBusiness } from '@/api/hooks';
 import { BUSINESS_TYPES, type BusinessType } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { Banner, Button, ChipRow, Field, Screen } from '@/components/ui';
-import { colors, radius, spacing, type } from '@/theme';
+import { useTheme } from '@/theme';
 
 /** Business onboarding (PRD F-002). Timezone is auto-detected and confirmable. */
 export default function Setup() {
@@ -24,6 +24,8 @@ export default function Setup() {
   const [editingTimezone, setEditingTimezone] = useState(false);
   const [seedStarterItems, setSeedStarterItems] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const t = useTheme();
+  const own = useOwnStyles();
 
   async function submit() {
     setError(null);
@@ -45,7 +47,7 @@ export default function Setup() {
 
   return (
     <Screen>
-      <Text style={styles.intro}>
+      <Text style={own.intro}>
         Your business sets the week your reports run on — Monday to Sunday in your own timezone.
       </Text>
 
@@ -59,8 +61,8 @@ export default function Setup() {
         autoCapitalize="words"
       />
 
-      <View style={styles.group}>
-        <Text style={styles.groupLabel}>Business type</Text>
+      <View style={own.group}>
+        <Text style={own.groupLabel}>Business type</Text>
         <ChipRow options={BUSINESS_TYPES} value={businessType} onChange={setBusinessType} columns />
       </View>
 
@@ -75,28 +77,29 @@ export default function Setup() {
           hint="IANA id, e.g. America/Los_Angeles"
         />
       ) : (
-        <Pressable style={styles.timezoneRow} onPress={() => setEditingTimezone(true)}>
+        <Pressable style={own.timezoneRow} onPress={() => setEditingTimezone(true)}>
           <View>
-            <Text style={styles.groupLabel}>Timezone</Text>
-            <Text style={styles.timezoneValue}>{timezone}</Text>
+            <Text style={own.groupLabel}>Timezone</Text>
+            <Text style={own.timezoneValue}>{timezone}</Text>
           </View>
-          <Text style={styles.change}>Change</Text>
+          <Text style={own.change}>Change</Text>
         </Pressable>
       )}
 
-      <Pressable style={styles.toggleRow} onPress={() => setSeedStarterItems((value) => !value)}>
-        <View style={[styles.checkbox, seedStarterItems && styles.checkboxOn]}>
-          {seedStarterItems && <Text style={styles.checkmark}>✓</Text>}
+      <Pressable style={own.toggleRow} onPress={() => setSeedStarterItems((value) => !value)}>
+        <View style={[own.checkbox, seedStarterItems && own.checkboxOn]}>
+          {seedStarterItems && <Text style={own.checkmark}>✓</Text>}
         </View>
-        <View style={styles.toggleCopy}>
-          <Text style={styles.toggleTitle}>Start me with common items</Text>
-          <Text style={styles.toggleBody}>
+        <View style={own.toggleCopy}>
+          <Text style={own.toggleTitle}>Start me with common items</Text>
+          <Text style={own.toggleBody}>
             Adds a handful of typical items for your business type. Edit the costs to match yours.
           </Text>
         </View>
       </Pressable>
 
       <Button
+        size="lg"
         title="Start tracking"
         onPress={submit}
         loading={createBusiness.isPending}
@@ -106,36 +109,46 @@ export default function Setup() {
   );
 }
 
-const styles = StyleSheet.create({
-  intro: { ...type.body, color: colors.inkMuted },
-  group: { gap: spacing.sm },
-  groupLabel: { ...type.label, color: colors.inkMuted },
-  timezoneRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.md,
-  },
-  timezoneValue: { ...type.body, color: colors.ink },
-  change: { ...type.body, color: colors.green, fontWeight: '600' },
-  toggleRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', paddingVertical: spacing.sm },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: colors.green, borderColor: colors.green },
-  checkmark: { color: '#fff', fontWeight: '700' },
-  toggleCopy: { flex: 1, gap: 2 },
-  toggleTitle: { ...type.body, color: colors.ink, fontWeight: '600' },
-  toggleBody: { ...type.caption, color: colors.inkMuted },
-});
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        intro: { ...t.text.body, color: t.colors.inkMuted },
+        group: { gap: t.space.sm },
+        groupLabel: { ...t.text.label, color: t.colors.inkMuted },
+        timezoneRow: {
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          backgroundColor: t.colors.surface,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: t.colors.hairlineStrong,
+          borderRadius: t.radius.md,
+          paddingHorizontal: t.space.lg,
+          paddingVertical: t.space.md,
+          minHeight: 56,
+        },
+        timezoneValue: { ...t.text.body, color: t.colors.ink },
+        change: { ...t.text.label, color: t.colors.brand },
+        toggleRow: { flexDirection: 'row', gap: t.space.md, alignItems: 'flex-start' },
+        checkbox: {
+          width: 24,
+          height: 24,
+          borderRadius: t.radius.sm,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: t.colors.hairlineStrong,
+          backgroundColor: t.colors.surface,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: 2,
+        },
+        checkboxOn: { backgroundColor: t.colors.brand, borderColor: t.colors.brand },
+        checkmark: { color: t.colors.onBrand, fontWeight: '700', fontSize: 13 },
+        toggleCopy: { flex: 1, gap: 2 },
+        toggleTitle: { ...t.text.bodyStrong, color: t.colors.ink },
+        toggleBody: { ...t.text.caption, color: t.colors.inkMuted },
+      }),
+    [t],
+  );
+}

@@ -1,40 +1,46 @@
-import React, { useState } from 'react';
-import { RefreshControl, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { useWeeklyReport } from '@/api/hooks';
-import { BarRow, Button, Card, EmptyState, Loading, Screen, SectionTitle } from '@/components/ui';
+import { BarRow, Card, EmptyState, Loading, Metric, Screen, Section, useStyles } from '@/components/ui';
 import { dateRange, money } from '@/format';
-import { colors, spacing, type } from '@/theme';
+import { tabular, useTheme } from '@/theme';
 
-/** Weekly report (PRD F-007): one recommendation at the top, evidence underneath. */
+/** Weekly report (PRD F-007): the recommendation leads, the evidence follows. */
 export default function Report() {
   const [weeksAgo, setWeeksAgo] = useState(1);
   const { data, isLoading, refetch, isRefetching } = useWeeklyReport(weeksAgo);
+  const t = useTheme();
+  const s = useStyles(t);
+  const own = useOwnStyles();
 
   if (isLoading) return <Loading label="Building your report…" />;
   if (!data) return null;
 
-  const maxItemCost = Math.max(...data.topItems.map((item) => item.cost), 0);
-  const maxDayCost = Math.max(...data.byDay.map((day) => day.cost), 0);
+  const maxItemCost = Math.max(...data.topItems.map((i) => i.cost), 0);
+  const maxDayCost = Math.max(...data.byDay.map((d) => d.cost), 0);
   const change = data.changePercent;
+  const wasteRose = change !== undefined && change !== null && change > 0;
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
-      <View style={styles.weekRow}>
-        <Button
-          title="‹ Earlier"
-          variant="ghost"
+    <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />}>
+      <View style={own.weekBar}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Earlier week"
           onPress={() => setWeeksAgo((w) => Math.min(w + 1, 12))}
-          style={styles.weekButton}
-        />
-        <Text style={styles.weekLabel}>{dateRange(data.weekStart, data.weekEnd)}</Text>
-        <Button
-          title="Later ›"
-          variant="ghost"
+          style={({ pressed }) => [own.stepper, pressed && s.pressed]}>
+          <Text style={own.stepperGlyph}>‹</Text>
+        </Pressable>
+        <Text style={own.weekRange}>{dateRange(data.weekStart, data.weekEnd)}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Later week"
           onPress={() => setWeeksAgo((w) => Math.max(w - 1, 0))}
           disabled={weeksAgo === 0}
-          style={styles.weekButton}
-        />
+          style={({ pressed }) => [own.stepper, weeksAgo === 0 && own.stepperOff, pressed && s.pressed]}>
+          <Text style={own.stepperGlyph}>›</Text>
+        </Pressable>
       </View>
 
       {data.entryCount === 0 ? (
@@ -44,70 +50,79 @@ export default function Report() {
         />
       ) : (
         <>
-          <Card style={styles.recommendationCard}>
-            <Text style={styles.recommendationLabel}>Do this next</Text>
-            <Text style={styles.recommendationText}>{data.recommendation.text}</Text>
-          </Card>
+          {/* The single most valuable sentence in the product gets the loudest surface. */}
+          <View style={own.advice}>
+            <Text style={own.adviceLabel}>Do this next</Text>
+            <Text style={own.adviceText}>{data.recommendation.text}</Text>
+          </View>
 
-          <Card>
-            <Text style={styles.totalLabel}>Total wasted</Text>
-            <Text style={styles.totalValue}>{money(data.totalCost, data.currency)}</Text>
+          <Card style={own.totalCard}>
+            <Text style={own.totalLabel}>Total wasted</Text>
+            <Text style={own.totalValue}>{money(data.totalCost, data.currency)}</Text>
             {change !== undefined && change !== null ? (
-              <Text style={[styles.change, change > 0 ? styles.worse : styles.better]}>
-                {change > 0 ? '▲' : '▼'} {Math.abs(change)}% vs. the week before (
-                {money(data.previousTotalCost, data.currency)})
+              <Text style={own.totalChange}>
+                <Text style={{ color: wasteRose ? t.colors.up : t.colors.down, fontWeight: '700' }}>
+                  {wasteRose ? '↑' : '↓'} {Math.abs(change)}%
+                </Text>
+                {`  vs. ${money(data.previousTotalCost, data.currency)} the week before`}
               </Text>
             ) : (
-              <Text style={styles.change}>No comparison week yet</Text>
+              <Text style={own.totalChange}>No comparison week yet</Text>
             )}
-            <View style={styles.factRow}>
-              <Fact label="Entries" value={String(data.entryCount)} />
-              <Fact label="Top reason" value={data.topReasonLabel ?? '—'} />
-              <Fact label="Worst day" value={data.worstDay ?? '—'} />
+            <View style={own.metrics}>
+              <Metric label="Entries" value={String(data.entryCount)} />
+              <Metric label="Top reason" value={data.topReasonLabel ?? '—'} />
+              <Metric label="Worst day" value={data.worstDay ?? '—'} />
             </View>
           </Card>
 
-          <SectionTitle>Where the money went</SectionTitle>
-          <Card>
-            {data.topItems.map((item) => (
-              <BarRow
-                key={item.itemId}
-                label={item.name}
-                value={item.cost}
-                max={maxItemCost}
-                caption={money(item.cost, data.currency)}
-              />
-            ))}
-          </Card>
+          <Section title="Where the money went">
+            <Card>
+              {data.topItems.map((item, index) => (
+                <BarRow
+                  key={item.itemId}
+                  first={index === 0}
+                  label={item.name}
+                  value={item.cost}
+                  max={maxItemCost}
+                  caption={money(item.cost, data.currency)}
+                />
+              ))}
+            </Card>
+          </Section>
 
-          <SectionTitle>By day</SectionTitle>
-          <Card>
-            {data.byDay.map((day) => (
-              <BarRow
-                key={day.date}
-                label={day.label}
-                value={day.cost}
-                max={maxDayCost}
-                caption={money(day.cost, data.currency)}
-                tone="amber"
-              />
-            ))}
-          </Card>
+          <Section title="By day">
+            <Card>
+              {data.byDay.map((day, index) => (
+                <BarRow
+                  key={day.date}
+                  first={index === 0}
+                  label={day.label}
+                  value={day.cost}
+                  max={maxDayCost}
+                  caption={money(day.cost, data.currency)}
+                  tone="warning"
+                />
+              ))}
+            </Card>
+          </Section>
 
-          <SectionTitle>By reason</SectionTitle>
-          <Card>
-            {data.byReason.map((slice) => (
-              <BarRow
-                key={slice.reason}
-                label={slice.label}
-                value={slice.cost}
-                max={data.totalCost}
-                caption={`${money(slice.cost, data.currency)} · ${Math.round(slice.share * 100)}%`}
-              />
-            ))}
-          </Card>
+          <Section title="By reason">
+            <Card>
+              {data.byReason.map((slice, index) => (
+                <BarRow
+                  key={slice.reason}
+                  first={index === 0}
+                  label={slice.label}
+                  value={slice.cost}
+                  max={data.totalCost}
+                  caption={`${money(slice.cost, data.currency)} · ${Math.round(slice.share * 100)}%`}
+                />
+              ))}
+            </Card>
+          </Section>
 
-          <Text style={styles.footnote}>
+          <Text style={own.footnote}>
             {data.fromSnapshot
               ? 'This week is closed — its headline numbers are frozen as you first read them.'
               : 'This week is still open, so these numbers move as you log.'}
@@ -118,32 +133,52 @@ export default function Report() {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.fact}>
-      <Text style={styles.factLabel}>{label}</Text>
-      <Text style={styles.factValue} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        weekBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        weekRange: { ...t.text.subhead, color: t.colors.ink, ...tabular },
+        stepper: {
+          width: 40,
+          height: 40,
+          borderRadius: t.radius.pill,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: t.colors.surface,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: t.colors.hairline,
+        },
+        stepperOff: { opacity: 0.3 },
+        stepperGlyph: { fontSize: 20, lineHeight: 24, color: t.colors.inkMuted },
+
+        advice: {
+          backgroundColor: t.colors.warningTint,
+          borderRadius: t.radius.lg,
+          padding: t.space.xl,
+          gap: t.space.sm,
+          borderLeftWidth: 3,
+          borderLeftColor: t.colors.warning,
+        },
+        adviceLabel: { ...t.text.label, color: t.colors.warning },
+        adviceText: { ...t.text.title, color: t.colors.ink, fontSize: 22, lineHeight: 30 },
+
+        totalCard: { paddingHorizontal: t.space.xl, paddingVertical: t.space.xl, gap: t.space.xs },
+        totalLabel: { ...t.text.label, color: t.colors.inkMuted },
+        totalValue: { ...t.text.display, color: t.colors.ink, ...tabular },
+        totalChange: { ...t.text.caption, color: t.colors.inkMuted, marginTop: t.space.xs },
+        metrics: {
+          flexDirection: 'row',
+          gap: t.space.md,
+          marginTop: t.space.lg,
+          paddingTop: t.space.lg,
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: t.colors.hairline,
+        },
+
+        footnote: { ...t.text.caption, color: t.colors.inkFaint, textAlign: 'center' },
+      }),
+    [t],
   );
 }
-
-const styles = StyleSheet.create({
-  weekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  weekButton: { minHeight: 36, paddingHorizontal: 0 },
-  weekLabel: { ...type.heading, color: colors.ink },
-  recommendationCard: { backgroundColor: colors.amberSoft, borderColor: colors.amber },
-  recommendationLabel: { ...type.label, color: '#8A5F1E', textTransform: 'uppercase' },
-  recommendationText: { ...type.title, color: colors.ink, lineHeight: 30 },
-  totalLabel: { ...type.label, color: colors.inkMuted, textTransform: 'uppercase' },
-  totalValue: { ...type.display, color: colors.ink },
-  change: { ...type.body, color: colors.inkMuted },
-  worse: { color: colors.tomato },
-  better: { color: colors.green },
-  factRow: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.sm },
-  fact: { flex: 1, gap: 2 },
-  factLabel: { ...type.caption, color: colors.inkMuted },
-  factValue: { ...type.body, color: colors.ink, fontWeight: '600' },
-  footnote: { ...type.caption, color: colors.inkFaint, textAlign: 'center', paddingTop: spacing.sm },
-});

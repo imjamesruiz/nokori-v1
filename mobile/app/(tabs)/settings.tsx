@@ -1,20 +1,21 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 
-import { ApiError, API_BASE_URL, fetchCsv } from '@/api/client';
+import { API_BASE_URL, ApiError, fetchCsv } from '@/api/client';
 import { useBusiness } from '@/api/hooks';
 import { useAuth } from '@/auth/AuthContext';
-import { Banner, Button, Card, Loading, Screen, SectionTitle } from '@/components/ui';
+import { Banner, Button, Card, Loading, Row, Screen, Section } from '@/components/ui';
 import { titleCase } from '@/format';
-import { colors, spacing, type } from '@/theme';
+import { useTheme } from '@/theme';
 
 export default function Settings() {
   const { user, signOut, deleteAccount } = useAuth();
   const { data: business, isLoading } = useBusiness();
   const [status, setStatus] = useState<{ tone: 'error' | 'success'; message: string } | null>(null);
   const [busy, setBusy] = useState<'export' | 'delete' | null>(null);
+  const own = useOwnStyles();
 
   async function exportCsv() {
     setStatus(null);
@@ -41,7 +42,10 @@ export default function Settings() {
       file.write(csv);
 
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'text/csv',
+          UTI: 'public.comma-separated-values-text',
+        });
       } else {
         setStatus({ tone: 'success', message: `Saved to ${file.uri}` });
       }
@@ -90,65 +94,62 @@ export default function Settings() {
     <Screen>
       {!!status && <Banner tone={status.tone}>{status.message}</Banner>}
 
-      <SectionTitle>Business</SectionTitle>
-      <Card>
-        <Row label="Name" value={business?.name ?? '—'} />
-        <Row label="Type" value={business ? titleCase(business.businessType) : '—'} />
-        <Row label="City" value={business?.city ?? '—'} />
-        <Row label="Timezone" value={business?.timezone ?? '—'} />
-        <Text style={styles.note}>
+      <Section title="Business">
+        <Card>
+          <Row first label="Name" value={business?.name ?? '—'} />
+          <Row label="Type" value={business ? titleCase(business.businessType) : '—'} />
+          <Row label="City" value={business?.city ?? '—'} />
+          <Row label="Timezone" value={business?.timezone ?? '—'} />
+        </Card>
+        <Text style={own.note}>
           Your timezone decides where each week starts and ends — Monday 00:00 to Sunday 23:59.
         </Text>
-      </Card>
+      </Section>
 
-      <SectionTitle>Your data</SectionTitle>
-      <Card>
+      <Section title="Your data">
         <Button
           title="Export waste data (CSV)"
           variant="secondary"
           onPress={exportCsv}
           loading={busy === 'export'}
         />
-        <Text style={styles.note}>
+        <Text style={own.note}>
           Every entry with its date, item, quantity, cost, and reason — opens in any spreadsheet.
         </Text>
-      </Card>
+      </Section>
 
-      <SectionTitle>Account</SectionTitle>
-      <Card>
-        <Row label="Signed in as" value={user?.email ?? '—'} />
-        <Button title="Log out" variant="secondary" onPress={() => void signOut()} />
-        <Button
-          title="Delete account"
-          variant="danger"
-          onPress={confirmDeleteAccount}
-          loading={busy === 'delete'}
-        />
-        <Text style={styles.note}>
+      <Section title="Account">
+        <Card>
+          <Row first label="Signed in as" value={user?.email ?? '—'} />
+        </Card>
+        <View style={own.actions}>
+          <Button title="Log out" variant="secondary" onPress={() => void signOut()} />
+          <Button
+            title="Delete account"
+            variant="dangerQuiet"
+            onPress={confirmDeleteAccount}
+            loading={busy === 'delete'}
+          />
+        </View>
+        <Text style={own.note}>
           Deleting removes your account and all of its data. Nothing is kept.
         </Text>
-      </Card>
+      </Section>
 
-      <Text style={styles.footer}>Nokori · connected to {API_BASE_URL}</Text>
+      <Text style={own.footer}>nokori · {API_BASE_URL}</Text>
     </Screen>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.row}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <Text style={styles.rowValue} numberOfLines={1}>
-        {value}
-      </Text>
-    </View>
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        note: { ...t.text.caption, color: t.colors.inkFaint },
+        actions: { gap: t.space.sm },
+        footer: { ...t.text.caption, color: t.colors.inkFaint, textAlign: 'center' },
+      }),
+    [t],
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.xs },
-  rowLabel: { ...type.body, color: colors.inkMuted },
-  rowValue: { ...type.body, color: colors.ink, fontWeight: '600', flexShrink: 1 },
-  note: { ...type.caption, color: colors.inkMuted },
-  footer: { ...type.caption, color: colors.inkFaint, textAlign: 'center', paddingTop: spacing.lg },
-});

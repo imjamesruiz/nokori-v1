@@ -4,29 +4,35 @@ import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native'
 
 import { ApiError, isUnreachable } from '@/api/client';
 import { useDashboard } from '@/api/hooks';
-import { Banner, Button, Card, EmptyState, Loading, Screen, SectionTitle } from '@/components/ui';
 import { SyncBanner } from '@/components/SyncBanner';
+import { Banner, Button, Card, EmptyState, Loading, Row, Screen, Section, useStyles } from '@/components/ui';
 import { dateRange, money, moneyShort, quantityWithUnit, shortDate } from '@/format';
-import { colors, radius, spacing, type } from '@/theme';
+import { tabular, useTheme } from '@/theme';
 
-/** Home (PRD F-005): dollars are the headline, everything else supports the decision. */
+/**
+ * Home (PRD F-005). One number is loud — the dollars — and everything else is deliberately
+ * quiet around it. Logging floats above the scroll so it is always one tap away.
+ */
 export default function Home() {
   const [weeksAgo, setWeeksAgo] = useState(0);
   const { data, isLoading, error, refetch, isRefetching } = useDashboard(weeksAgo);
   const router = useRouter();
+  const t = useTheme();
+  const s = useStyles(t);
+  const own = useOwnStyles();
+
+  const logAction = (
+    <Button title="Log waste" size="lg" pill onPress={() => router.push('/log-waste')} />
+  );
 
   if (isLoading) return <Loading label="Loading your week…" />;
 
-  // The dashboard needs the server, but logging does not. Offline, this screen still has to
-  // show the pending queue and keep the Log Waste button reachable — that is the whole point
-  // of the queue for a truck parked somewhere with no signal (PRD F-012).
+  // The dashboard needs the server, but logging does not. Offline this screen still has to show
+  // the pending queue and keep logging reachable — the whole point of the queue (PRD F-012).
   if (error || !data) {
-    // Treat anything that is not an explicit server complaint as "offline". React Query can
-    // also park a request without surfacing an error at all, and to an operator standing in a
-    // parking lot the useful message is the same either way.
     const offline = !error || isUnreachable(error);
     return (
-      <Screen>
+      <Screen floatingAction={logAction}>
         <SyncBanner />
         <Banner tone={offline ? 'info' : 'error'}>
           {offline
@@ -35,7 +41,6 @@ export default function Home() {
               ? error.message
               : 'Could not load your dashboard.'}
         </Banner>
-        <Button title="Log waste" onPress={() => router.push('/log-waste')} />
         <Button title="Try again" variant="secondary" onPress={() => refetch()} />
       </Screen>
     );
@@ -43,50 +48,67 @@ export default function Home() {
 
   const currency = data.currency;
   const change = data.changePercent;
+  const wasteRose = change !== undefined && change !== null && change > 0;
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
+    <Screen
+      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />}
+      floatingAction={logAction}>
       <SyncBanner />
 
-      <View style={styles.weekRow}>
+      <View style={own.weekBar}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Previous week"
           onPress={() => setWeeksAgo((w) => Math.min(w + 1, 12))}
-          style={styles.weekArrow}>
-          <Text style={styles.weekArrowText}>‹</Text>
+          style={({ pressed }) => [own.stepper, pressed && s.pressed]}>
+          <Text style={own.stepperGlyph}>‹</Text>
         </Pressable>
-        <Text style={styles.weekLabel}>
-          {data.isCurrentWeek ? 'This week' : dateRange(data.weekStart, data.weekEnd)}
-        </Text>
+
+        <View style={own.weekLabelWrap}>
+          <Text style={own.weekLabel}>{data.isCurrentWeek ? 'This week' : 'Week of'}</Text>
+          <Text style={own.weekRange}>{dateRange(data.weekStart, data.weekEnd)}</Text>
+        </View>
+
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Next week"
           onPress={() => setWeeksAgo((w) => Math.max(w - 1, 0))}
           disabled={weeksAgo === 0}
-          style={[styles.weekArrow, weeksAgo === 0 && styles.weekArrowDisabled]}>
-          <Text style={styles.weekArrowText}>›</Text>
+          style={({ pressed }) => [own.stepper, weeksAgo === 0 && own.stepperOff, pressed && s.pressed]}>
+          <Text style={own.stepperGlyph}>›</Text>
         </Pressable>
       </View>
 
-      <Card style={styles.heroCard}>
-        <Text style={styles.heroLabel}>Wasted {data.isCurrentWeek ? 'so far this week' : 'that week'}</Text>
-        <Text style={styles.heroValue}>{money(data.totalWasted, currency)}</Text>
-        <View style={styles.heroMetaRow}>
+      {/* The one loud thing on the screen. */}
+      <Card tone="inverse" style={own.hero}>
+        <Text style={own.heroLabel}>
+          Wasted {data.isCurrentWeek ? 'so far this week' : 'that week'}
+        </Text>
+        <Text style={own.heroValue}>{money(data.totalWasted, currency)}</Text>
+
+        <View style={own.heroFooter}>
           {change !== undefined && change !== null ? (
-            <Text style={[styles.heroMeta, change > 0 ? styles.worse : styles.better]}>
-              {change > 0 ? '▲' : '▼'} {Math.abs(change)}% vs. previous week
-            </Text>
-          ) : (
-            <Text style={styles.heroMeta}>No comparison week yet</Text>
-          )}
+            <View style={[own.trend, wasteRose ? own.trendUp : own.trendDown]}>
+              <Text style={[own.trendText, wasteRose ? own.trendTextUp : own.trendTextDown]}>
+                {wasteRose ? '↑' : '↓'} {Math.abs(change)}%
+              </Text>
+            </View>
+          ) : null}
+          <Text style={own.heroMeta}>
+            {change !== undefined && change !== null
+              ? 'vs. previous week'
+              : 'No comparison week yet'}
+          </Text>
         </View>
-        <Text style={styles.projection}>
-          On this pace: about {moneyShort(data.projectedMonthly, currency)}/month (estimate)
+
+        <View style={own.heroRule} />
+        <Text style={own.heroProjection}>
+          On this pace, about{' '}
+          <Text style={own.heroProjectionStrong}>{moneyShort(data.projectedMonthly, currency)}</Text> a
+          month
         </Text>
       </Card>
-
-      <Button title="Log waste" onPress={() => router.push('/log-waste')} />
 
       {data.entryCount === 0 ? (
         <EmptyState
@@ -95,93 +117,102 @@ export default function Home() {
         />
       ) : (
         <>
-          <View style={styles.insightRow}>
-            {data.topItem && (
-              <Card style={styles.insightCard}>
-                <Text style={styles.insightLabel}>Top item</Text>
-                <Text style={styles.insightValue}>{data.topItem.name}</Text>
-                <Text style={styles.insightMeta}>
-                  {money(data.topItem.cost, currency)} ·{' '}
-                  {quantityWithUnit(data.topItem.quantity, data.topItem.unit)}
-                </Text>
-              </Card>
-            )}
-            {data.worstDay && (
-              <Card style={styles.insightCard}>
-                <Text style={styles.insightLabel}>Worst day</Text>
-                <Text style={styles.insightValue}>{data.worstDay.label}</Text>
-                <Text style={styles.insightMeta}>{money(data.worstDay.cost, currency)}</Text>
-              </Card>
-            )}
-          </View>
-
-          {data.topReason && (
+          <Section title="What drove it">
             <Card>
-              <Text style={styles.insightLabel}>Main reason</Text>
-              <Text style={styles.insightValue}>{data.topReason.label}</Text>
-              <Text style={styles.insightMeta}>
-                {money(data.topReason.cost, currency)} · {Math.round(data.topReason.share * 100)}% of
-                this week's cost
-              </Text>
+              {data.topItem && (
+                <Row
+                  first
+                  label={data.topItem.name}
+                  meta={`Most wasted · ${quantityWithUnit(data.topItem.quantity, data.topItem.unit)}`}
+                  value={money(data.topItem.cost, currency)}
+                />
+              )}
+              {data.worstDay && (
+                <Row
+                  label="Worst day"
+                  meta={data.worstDay.label}
+                  value={money(data.worstDay.cost, currency)}
+                />
+              )}
+              {data.topReason && (
+                <Row
+                  label="Main reason"
+                  meta={`${data.topReason.label} · ${Math.round(data.topReason.share * 100)}% of cost`}
+                  value={money(data.topReason.cost, currency)}
+                />
+              )}
             </Card>
-          )}
+          </Section>
 
-          <SectionTitle>Recent entries</SectionTitle>
-          <Card style={styles.listCard}>
-            {data.recentEntries.map((entry, index) => (
-              <View
-                key={entry.id}
-                style={[styles.entryRow, index > 0 && styles.entryRowDivider]}>
-                <View style={styles.entryMain}>
-                  <Text style={styles.entryName}>{entry.itemName}</Text>
-                  <Text style={styles.entryMeta}>
-                    {quantityWithUnit(entry.quantity, entry.unit)} · {entry.reasonLabel} ·{' '}
-                    {shortDate(entry.wasteDate)}
-                  </Text>
-                </View>
-                <Text style={styles.entryCost}>{money(entry.totalCostLost, currency)}</Text>
-              </View>
-            ))}
-          </Card>
+          <Section
+            title="Recent"
+            action={
+              <Pressable accessibilityRole="button" onPress={() => router.push('/history')}>
+                <Text style={own.link}>See all</Text>
+              </Pressable>
+            }>
+            <Card>
+              {data.recentEntries.map((entry, index) => (
+                <Row
+                  key={entry.id}
+                  first={index === 0}
+                  label={entry.itemName}
+                  meta={`${quantityWithUnit(entry.quantity, entry.unit)} · ${entry.reasonLabel} · ${shortDate(entry.wasteDate)}`}
+                  value={money(entry.totalCostLost, currency)}
+                />
+              ))}
+            </Card>
+          </Section>
         </>
       )}
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  weekRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  weekArrow: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  weekArrowDisabled: { opacity: 0.35 },
-  weekArrowText: { fontSize: 22, color: colors.ink, lineHeight: 26 },
-  weekLabel: { ...type.heading, color: colors.ink },
-  heroCard: { backgroundColor: colors.green, borderColor: colors.green, gap: spacing.xs },
-  heroLabel: { ...type.label, color: colors.greenSoft, textTransform: 'uppercase' },
-  heroValue: { ...type.display, color: '#fff' },
-  heroMetaRow: { flexDirection: 'row' },
-  heroMeta: { ...type.body, color: colors.greenSoft },
-  worse: { color: '#F6C9BF' },
-  better: { color: '#C9E8D6' },
-  projection: { ...type.caption, color: colors.greenSoft },
-  insightRow: { flexDirection: 'row', gap: spacing.md },
-  insightCard: { flex: 1, gap: 2 },
-  insightLabel: { ...type.label, color: colors.inkMuted, textTransform: 'uppercase' },
-  insightValue: { ...type.heading, color: colors.ink },
-  insightMeta: { ...type.caption, color: colors.inkMuted },
-  listCard: { gap: 0, paddingVertical: spacing.xs },
-  entryRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, gap: spacing.md },
-  entryRowDivider: { borderTopWidth: 1, borderTopColor: colors.border },
-  entryMain: { flex: 1, gap: 2 },
-  entryName: { ...type.body, color: colors.ink, fontWeight: '600' },
-  entryMeta: { ...type.caption, color: colors.inkMuted },
-  entryCost: { ...type.heading, color: colors.ink, fontVariant: ['tabular-nums'] },
-});
+function useOwnStyles() {
+  const t = useTheme();
+  return React.useMemo(
+    () =>
+      StyleSheet.create({
+        weekBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+        weekLabelWrap: { alignItems: 'center', gap: 1 },
+        weekLabel: { ...t.text.subhead, color: t.colors.ink },
+        weekRange: { ...t.text.caption, color: t.colors.inkMuted, ...tabular },
+        stepper: {
+          width: 40,
+          height: 40,
+          borderRadius: t.radius.pill,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: t.colors.surface,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: t.colors.hairline,
+        },
+        stepperOff: { opacity: 0.3 },
+        stepperGlyph: { fontSize: 20, lineHeight: 24, color: t.colors.inkMuted },
+
+        hero: { paddingHorizontal: t.space.xl, paddingVertical: t.space.xl, gap: t.space.xs },
+        heroLabel: { ...t.text.label, color: t.colors.onBrandMuted },
+        heroValue: { ...t.text.display, color: t.colors.onBrand, ...tabular, marginTop: t.space.xs },
+        heroFooter: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, marginTop: t.space.sm },
+        trend: { paddingHorizontal: t.space.sm, paddingVertical: 3, borderRadius: t.radius.sm },
+        trendUp: { backgroundColor: 'rgba(230, 129, 104, 0.22)' },
+        trendDown: { backgroundColor: 'rgba(107, 184, 147, 0.22)' },
+        trendText: { ...t.text.caption, fontWeight: '700', ...tabular },
+        trendTextUp: { color: '#F3B4A3' },
+        trendTextDown: { color: '#9EDCBC' },
+        heroMeta: { ...t.text.caption, color: t.colors.onBrandMuted },
+        heroRule: {
+          height: StyleSheet.hairlineWidth,
+          backgroundColor: 'rgba(255,255,255,0.16)',
+          marginVertical: t.space.lg,
+        },
+        heroProjection: { ...t.text.body, color: t.colors.onBrandMuted },
+        heroProjectionStrong: { color: t.colors.onBrand, fontWeight: '600', ...tabular },
+
+        footnote: { ...t.text.caption, color: t.colors.inkFaint, paddingHorizontal: t.space.xs },
+        link: { ...t.text.label, color: t.colors.brand },
+      }),
+    [t],
+  );
+}

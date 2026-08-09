@@ -1,11 +1,11 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Platform, StyleSheet, Text } from 'react-native';
 
 import { ApiError } from '@/api/client';
 import { Banner, Button, Field, Screen } from '@/components/ui';
 import { useAuth } from '@/auth/AuthContext';
-import { colors, spacing, type } from '@/theme';
+import { useTheme } from '@/theme';
 
 export default function SignUp() {
   const { signUp } = useAuth();
@@ -16,6 +16,7 @@ export default function SignUp() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const own = useOwnStyles();
 
   async function submit() {
     setError(null);
@@ -44,8 +45,8 @@ export default function SignUp() {
     <Screen>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.form}>
-        <Text style={styles.intro}>
+        style={own.form}>
+        <Text style={own.intro}>
           One account per business. You'll add your tracked items right after this.
         </Text>
 
@@ -82,13 +83,20 @@ export default function SignUp() {
           error={fieldErrors.confirm}
         />
 
-        <Button title="Create account" onPress={submit} loading={busy} />
+        <Button title="Create account" size="lg" onPress={submit} loading={busy} />
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  form: { gap: spacing.md },
-  intro: { ...type.body, color: colors.inkMuted, paddingBottom: spacing.sm },
-});
+function useOwnStyles() {
+  const t = useTheme();
+  return useMemo(
+    () =>
+      StyleSheet.create({
+        form: { gap: t.space.lg, paddingTop: t.space.md },
+        intro: { ...t.text.body, color: t.colors.inkMuted },
+      }),
+    [t],
+  );
+}
