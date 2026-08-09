@@ -44,6 +44,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * "Try again later" rather than "this will never work": the request never reached the API, or
+ * it hit a gateway that was down. Drives the offline queue and offline session restore (F-012).
+ */
+export function isUnreachable(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  return error.status === 0 || error.status === 502 || error.status === 503 || error.status === 504;
+}
+
 export const tokens = {
   async read(): Promise<{ accessToken: string | null; refreshToken: string | null }> {
     const [accessToken, refreshToken] = await Promise.all([
@@ -85,11 +94,18 @@ async function refreshAccessToken(): Promise<string | null> {
     const { refreshToken } = await tokens.read();
     if (!refreshToken) return null;
 
-    const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+    } catch {
+      // Offline mid-refresh. The tokens are still good — surface it as unreachable so the
+      // caller can queue, instead of destroying the session over a dead network.
+      throw new ApiError(0, 'network_error', `Can't reach Nokori at ${API_BASE_URL}.`);
+    }
     if (!response.ok) {
       await tokens.clear();
       onSessionExpired?.();

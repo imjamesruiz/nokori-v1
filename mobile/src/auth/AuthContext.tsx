@@ -1,8 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { api, setSessionExpiredHandler, tokens } from '@/api/client';
+import { api, isUnreachable, setSessionExpiredHandler, tokens } from '@/api/client';
 import type { AuthResponse, MeResponse } from '@/api/types';
+import { clearInventoryCache } from '@/offline/inventoryCache';
+import { clearQueue } from '@/offline/queue';
+
+import { cacheUser, clearCachedUser, readCachedUser } from './userCache';
 
 type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
@@ -26,6 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearSession = useCallback(async () => {
     await tokens.clear();
+    // Queued entries belong to the account that captured them; leaving them would post one
+    // owner's waste into the next owner's business on a shared phone.
+    await Promise.all([clearQueue(), clearInventoryCache(), clearCachedUser()]);
     setUser(null);
     setStatus('signedOut');
     queryClient.clear();
@@ -43,10 +50,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const me = await api<MeResponse>('/auth/me');
         if (cancelled) return;
+        void cacheUser(me);
         setUser(me);
         setStatus('signedIn');
-      } catch {
-        if (!cancelled) await clearSession();
+      } catch (error) {
+        if (cancelled) return;
+        // Launching with no signal is not a rejected session. Signing out here would strand
+        // the user at the login screen — and take their queued entries with it.
+        const cached = isUnreachable(error) ? await readCachedUser() : null;
+        if (cached) {
+          setUser(cached);
+          setStatus('signedIn');
+          return;
+        }
+        await clearSession();
       }
     })();
     return () => {
@@ -69,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         body: { email: email.trim(), password },
       });
       await tokens.save(auth);
+      void cacheUser(auth.user);
       setUser(auth.user);
       setStatus('signedIn');
     },
@@ -88,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       refreshUser: async () => {
         const me = await api<MeResponse>('/auth/me');
+        void cacheUser(me);
         setUser(me);
       },
     }),

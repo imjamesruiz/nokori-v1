@@ -11,9 +11,9 @@ import { colors, spacing, type } from '@/theme';
 /** Inventory (PRD F-003): the item list the log screen picks from, grouped by category. */
 export default function Inventory() {
   const router = useRouter();
-  const { data, isLoading, refetch, isRefetching } = useInventory(true);
+  const { data, isPending, refetch, isRefetching } = useInventory(true);
 
-  if (isLoading) return <Loading />;
+  if (isPending) return <Loading />;
 
   const items = data ?? [];
   const active = items.filter((item) => item.active);

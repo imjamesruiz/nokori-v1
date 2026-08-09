@@ -4,6 +4,7 @@ import { Alert, Platform, Pressable, RefreshControl, StyleSheet, Text, View } fr
 import { useDeleteEntry, useHistory, useInventory, type HistoryFilter } from '@/api/hooks';
 import { WASTE_REASONS, type WasteReason } from '@/api/types';
 import { Card, ChipRow, EmptyState, Loading, Screen } from '@/components/ui';
+import { SyncBanner } from '@/components/SyncBanner';
 import { money, quantityWithUnit, shortDate, weekdayShort } from '@/format';
 import { colors, radius, spacing, type } from '@/theme';
 
@@ -69,6 +70,8 @@ export default function History() {
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
+      <SyncBanner />
+
       <ChipRow
         options={[
           { value: 'week', label: 'This week' },

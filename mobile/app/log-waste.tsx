@@ -17,7 +17,7 @@ import { uuidv4 } from '@/uuid';
  */
 export default function LogWaste() {
   const router = useRouter();
-  const { data: items, isLoading } = useInventory();
+  const { data: items, isPending } = useInventory();
   const logWaste = useLogWaste();
 
   const [search, setSearch] = useState('');
@@ -27,7 +27,9 @@ export default function LogWaste() {
   const [note, setNote] = useState('');
   const [showNote, setShowNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<{ amount: string; queuedOffline: boolean } | null>(
+    null,
+  );
 
   const selectedItem = useMemo(
     () => items?.find((item) => item.id === itemId) ?? null,
@@ -47,8 +49,8 @@ export default function LogWaste() {
     if (!selectedItem || !reason) return;
     setError(null);
     try {
-      const entry = await logWaste.mutateAsync({
-        inventoryItemId: selectedItem.id,
+      const result = await logWaste.mutateAsync({
+        item: selectedItem,
         quantity,
         reason,
         wasteDate: todayIso(),
@@ -56,14 +58,17 @@ export default function LogWaste() {
         // Makes a retry after a dropped connection create the entry once (PRD F-012).
         clientUuid: uuidv4(),
       });
-      setConfirmation(`${money(entry.totalCostLost)} logged`);
-      setTimeout(() => dismissModal(router), 700);
+      setConfirmation({
+        amount: money(result.entry.totalCostLost),
+        queuedOffline: result.queuedOffline,
+      });
+      setTimeout(() => dismissModal(router), 900);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save that entry.');
     }
   }
 
-  if (isLoading) return <Loading label="Loading your items…" />;
+  if (isPending) return <Loading label="Loading your items…" />;
 
   if (!items || items.length === 0) {
     return (
@@ -86,8 +91,12 @@ export default function LogWaste() {
   if (confirmation) {
     return (
       <View style={styles.confirmation}>
-        <Text style={styles.confirmationValue}>{confirmation}</Text>
-        <Text style={styles.confirmationCaption}>Saved to this week</Text>
+        <Text style={styles.confirmationValue}>{confirmation.amount} logged</Text>
+        <Text style={styles.confirmationCaption}>
+          {confirmation.queuedOffline
+            ? "Saved on this phone — it'll upload when you're back online"
+            : 'Saved to this week'}
+        </Text>
       </View>
     );
   }

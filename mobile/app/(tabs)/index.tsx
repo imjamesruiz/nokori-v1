@@ -2,9 +2,10 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
-import { ApiError } from '@/api/client';
+import { ApiError, isUnreachable } from '@/api/client';
 import { useDashboard } from '@/api/hooks';
 import { Banner, Button, Card, EmptyState, Loading, Screen, SectionTitle } from '@/components/ui';
+import { SyncBanner } from '@/components/SyncBanner';
 import { dateRange, money, moneyShort, quantityWithUnit, shortDate } from '@/format';
 import { colors, radius, spacing, type } from '@/theme';
 
@@ -16,23 +17,37 @@ export default function Home() {
 
   if (isLoading) return <Loading label="Loading your week…" />;
 
-  if (error) {
+  // The dashboard needs the server, but logging does not. Offline, this screen still has to
+  // show the pending queue and keep the Log Waste button reachable — that is the whole point
+  // of the queue for a truck parked somewhere with no signal (PRD F-012).
+  if (error || !data) {
+    // Treat anything that is not an explicit server complaint as "offline". React Query can
+    // also park a request without surfacing an error at all, and to an operator standing in a
+    // parking lot the useful message is the same either way.
+    const offline = !error || isUnreachable(error);
     return (
       <Screen>
-        <Banner tone="error">
-          {error instanceof ApiError ? error.message : 'Could not load your dashboard.'}
+        <SyncBanner />
+        <Banner tone={offline ? 'info' : 'error'}>
+          {offline
+            ? "You're offline. Anything you log is saved on this phone and uploads when you're back."
+            : error instanceof ApiError
+              ? error.message
+              : 'Could not load your dashboard.'}
         </Banner>
+        <Button title="Log waste" onPress={() => router.push('/log-waste')} />
         <Button title="Try again" variant="secondary" onPress={() => refetch()} />
       </Screen>
     );
   }
-  if (!data) return null;
 
   const currency = data.currency;
   const change = data.changePercent;
 
   return (
     <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}>
+      <SyncBanner />
+
       <View style={styles.weekRow}>
         <Pressable
           accessibilityRole="button"
