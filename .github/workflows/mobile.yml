@@ -1,0 +1,31 @@
+name: Mobile
+
+# See the note in backend.yml: scoped to mobile/** so the job only runs where there is
+# something to typecheck, and this file is kept out of its own paths filter.
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**']
+  pull_request:
+    paths: ['mobile/**']
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        working-directory: mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: mobile
+        run: npm run typecheck

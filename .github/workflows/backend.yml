@@ -1,12 +1,21 @@
-name: CI
+name: Backend
 
+# Scoped to backend/** so a mobile-only change doesn't spin up Postgres and build an
+# image, and so commits that touch neither half (like the initial scaffolding) don't
+# run a job that has nothing to build.
+#
+# This file is deliberately absent from the paths filter: including it means any commit
+# editing the workflow runs it, which fails on a tree where backend/ doesn't exist yet.
+# The tradeoff is that a workflow-only edit isn't exercised until the next backend change.
 on:
   push:
     branches: [main]
+    paths: ['backend/**']
   pull_request:
+    paths: ['backend/**']
 
 jobs:
-  backend:
+  test:
     runs-on: ubuntu-latest
 
     services:
@@ -44,23 +53,3 @@ jobs:
       - name: Build image
         working-directory: backend
         run: docker build -t nokori-api:${{ github.sha }} .
-
-  mobile:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-
-      - name: Install
-        working-directory: mobile
-        run: npm ci
-
-      - name: Typecheck
-        working-directory: mobile
-        run: npm run typecheck
