@@ -1,31 +1,64 @@
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { ApiError, isUnreachable } from '@/api/client';
-import { useDashboard } from '@/api/hooks';
+import { useByReason, useDashboard, useTopItems } from '@/api/hooks';
+import type { WasteReason } from '@/api/types';
 import { SyncBanner } from '@/components/SyncBanner';
-import { Banner, Button, Card, EmptyState, Loading, Row, Screen, Section, useStyles } from '@/components/ui';
-import { dateRange, money, moneyShort, quantityWithUnit, shortDate } from '@/format';
-import { tabular, useTheme } from '@/theme';
+import {
+  DottedRule,
+  Receipt,
+  ReceiptHeader,
+  ReceiptRow,
+  ReceiptTotal,
+  RingChart,
+  ViewToggle,
+  useReceiptStyles,
+} from '@/components/receipt';
+import { Banner, Button, EmptyState, Loading, Screen } from '@/components/ui';
+import { dateRange, money, moneyShort, parseIsoDate, quantityWithUnit } from '@/format';
+import { mono, useTheme } from '@/theme';
+
+type Mode = 'receipt' | 'chart';
+
+/** ISO week number — the "WK 32" on the header, the way a till stamps its ticket. */
+function weekNumber(iso: string): number {
+  const date = parseIsoDate(iso);
+  const thursday = new Date(date);
+  thursday.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+  const firstThursday = new Date(thursday.getFullYear(), 0, 4);
+  return (
+    1 +
+    Math.round(
+      ((thursday.getTime() - firstThursday.getTime()) / 86400000 -
+        3 +
+        ((firstThursday.getDay() + 6) % 7)) /
+        7,
+    )
+  );
+}
 
 /**
- * Home (PRD F-005). One number is loud — the dollars — and everything else is deliberately
- * quiet around it. Logging floats above the scroll so it is always one tap away.
+ * Home (PRD F-005) as a printed ticket. The itemised list is the default because that is how
+ * an operator already reads a total; the ring behind the toggle answers "why" rather than
+ * "how much", and is the PRD 2.1 "what remains" mark doing double duty as a chart.
  */
 export default function Home() {
   const [weeksAgo, setWeeksAgo] = useState(0);
+  const [mode, setMode] = useState<Mode>('receipt');
   const { data, isLoading, error, refetch, isRefetching } = useDashboard(weeksAgo);
+  const { data: topItems } = useTopItems(weeksAgo);
+  const { data: byReason } = useByReason(weeksAgo);
   const router = useRouter();
   const t = useTheme();
-  const s = useStyles(t);
+  const r = useReceiptStyles();
   const own = useOwnStyles();
+  const reasonColor = useReasonColors();
 
-  const logAction = (
-    <Button title="Log waste" size="lg" pill onPress={() => router.push('/log-waste')} />
-  );
+  const logAction = <Button title="Log waste" size="lg" pill onPress={() => router.push('/log-waste')} />;
 
-  if (isLoading) return <Loading label="Loading your week…" />;
+  if (isLoading) return <Loading label="Printing your week…" />;
 
   // The dashboard needs the server, but logging does not. Offline this screen still has to show
   // the pending queue and keep logging reachable — the whole point of the queue (PRD F-012).
@@ -50,168 +83,197 @@ export default function Home() {
   const change = data.changePercent;
   const wasteRose = change !== undefined && change !== null && change > 0;
 
+  const slices = (byReason ?? [])
+    .filter((slice) => slice.cost > 0)
+    .map((slice) => ({
+      key: slice.reason,
+      label: `${slice.label}  ${money(slice.cost, currency)}`,
+      value: slice.cost,
+      color: reasonColor(slice.reason),
+    }));
+
   return (
     <Screen
-      refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />}
+      refreshControl={
+        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />
+      }
       floatingAction={logAction}>
       <SyncBanner />
 
-      <View style={own.weekBar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Previous week"
-          onPress={() => setWeeksAgo((w) => Math.min(w + 1, 12))}
-          style={({ pressed }) => [own.stepper, pressed && s.pressed]}>
-          <Text style={own.stepperGlyph}>‹</Text>
-        </Pressable>
-
-        <View style={own.weekLabelWrap}>
-          <Text style={own.weekLabel}>{data.isCurrentWeek ? 'This week' : 'Week of'}</Text>
-          <Text style={own.weekRange}>{dateRange(data.weekStart, data.weekEnd)}</Text>
-        </View>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Next week"
-          onPress={() => setWeeksAgo((w) => Math.max(w - 1, 0))}
-          disabled={weeksAgo === 0}
-          style={({ pressed }) => [own.stepper, weeksAgo === 0 && own.stepperOff, pressed && s.pressed]}>
-          <Text style={own.stepperGlyph}>›</Text>
-        </Pressable>
-      </View>
-
-      {/* The one loud thing on the screen. */}
-      <Card tone="inverse" style={own.hero}>
-        <Text style={own.heroLabel}>
-          Wasted {data.isCurrentWeek ? 'so far this week' : 'that week'}
-        </Text>
-        <Text style={own.heroValue}>{money(data.totalWasted, currency)}</Text>
-
-        <View style={own.heroFooter}>
-          {change !== undefined && change !== null ? (
-            <View style={[own.trend, wasteRose ? own.trendUp : own.trendDown]}>
-              <Text style={[own.trendText, wasteRose ? own.trendTextUp : own.trendTextDown]}>
-                {wasteRose ? '↑' : '↓'} {Math.abs(change)}%
-              </Text>
-            </View>
-          ) : null}
-          <Text style={own.heroMeta}>
-            {change !== undefined && change !== null
-              ? 'vs. previous week'
-              : 'No comparison week yet'}
-          </Text>
-        </View>
-
-        <View style={own.heroRule} />
-        <Text style={own.heroProjection}>
-          On this pace, about{' '}
-          <Text style={own.heroProjectionStrong}>{moneyShort(data.projectedMonthly, currency)}</Text> a
-          month
-        </Text>
-      </Card>
-
-      {data.entryCount === 0 ? (
-        <EmptyState
-          title="Nothing logged yet"
-          body="Log one item — even a rough guess — and Nokori starts showing what it costs you."
+      <Receipt torn>
+        <ReceiptHeader
+          title="N O K O R I"
+          subtitle={`WK ${weekNumber(data.weekStart)} · ${dateRange(data.weekStart, data.weekEnd).toUpperCase()}`}
         />
-      ) : (
-        <>
-          <Section title="What drove it">
-            <Card>
-              {data.topItem && (
-                <Row
-                  first
-                  label={data.topItem.name}
-                  meta={`Most wasted · ${quantityWithUnit(data.topItem.quantity, data.topItem.unit)}`}
-                  value={money(data.topItem.cost, currency)}
-                />
-              )}
-              {data.worstDay && (
-                <Row
-                  label="Worst day"
-                  meta={data.worstDay.label}
-                  value={money(data.worstDay.cost, currency)}
-                />
-              )}
-              {data.topReason && (
-                <Row
-                  label="Main reason"
-                  meta={`${data.topReason.label} · ${Math.round(data.topReason.share * 100)}% of cost`}
-                  value={money(data.topReason.cost, currency)}
-                />
-              )}
-            </Card>
-          </Section>
 
-          <Section
-            title="Recent"
-            action={
-              <Pressable accessibilityRole="button" onPress={() => router.push('/history')}>
-                <Text style={own.link}>See all</Text>
-              </Pressable>
-            }>
-            <Card>
-              {data.recentEntries.map((entry, index) => (
-                <Row
-                  key={entry.id}
-                  first={index === 0}
-                  label={entry.itemName}
-                  meta={`${quantityWithUnit(entry.quantity, entry.unit)} · ${entry.reasonLabel} · ${shortDate(entry.wasteDate)}`}
-                  value={money(entry.totalCostLost, currency)}
-                />
-              ))}
-            </Card>
-          </Section>
-        </>
+        <View style={own.weekBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Previous week"
+            onPress={() => setWeeksAgo((w) => Math.min(w + 1, 12))}
+            style={({ pressed }) => [own.step, pressed && { opacity: 0.5 }]}>
+            <Text style={own.stepGlyph}>◀</Text>
+          </Pressable>
+          <Text style={own.weekWord}>{data.isCurrentWeek ? 'THIS WEEK' : 'PAST WEEK'}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Next week"
+            onPress={() => setWeeksAgo((w) => Math.max(w - 1, 0))}
+            disabled={weeksAgo === 0}
+            style={({ pressed }) => [own.step, weeksAgo === 0 && { opacity: 0.25 }, pressed && { opacity: 0.5 }]}>
+            <Text style={own.stepGlyph}>▶</Text>
+          </Pressable>
+        </View>
+
+        <DottedRule />
+
+        {data.entryCount === 0 ? (
+          <EmptyState
+            title="Nothing logged yet"
+            body="Log one item — even a rough guess — and Nokori starts printing what it costs you."
+          />
+        ) : (
+          <>
+            <View style={own.toggleWrap}>
+              <ViewToggle
+                options={[
+                  { value: 'receipt' as const, label: 'ITEMS' },
+                  { value: 'chart' as const, label: 'REASONS' },
+                ]}
+                value={mode}
+                onChange={setMode}
+              />
+            </View>
+
+            {mode === 'receipt' ? (
+              <>
+                {(topItems ?? []).map((item) => (
+                  <ReceiptRow
+                    key={item.itemId}
+                    label={item.name.toUpperCase()}
+                    meta={quantityWithUnit(item.quantity, item.unit)}
+                    amount={money(item.cost, currency)}
+                  />
+                ))}
+                <DottedRule />
+                {!!data.worstDay && (
+                  <ReceiptRow
+                    label="WORST DAY"
+                    amount={data.worstDay.label}
+                    muted
+                  />
+                )}
+                {!!data.topReason && (
+                  <ReceiptRow
+                    label="MAIN REASON"
+                    amount={`${data.topReason.label} ${Math.round(data.topReason.share * 100)}%`}
+                    muted
+                  />
+                )}
+                <ReceiptRow label="ENTRIES" amount={String(data.entryCount)} muted />
+              </>
+            ) : (
+              <RingChart
+                slices={slices}
+                centerValue={money(data.totalWasted, currency)}
+                centerLabel={`${data.entryCount} entries`}
+              />
+            )}
+
+            <ReceiptTotal
+              label="TOTAL WASTED"
+              amount={money(data.totalWasted, currency)}
+              note={
+                change !== undefined && change !== null
+                  ? `${wasteRose ? '▲' : '▼'} ${Math.abs(change)}% vs. previous week`
+                  : 'No comparison week yet'
+              }
+            />
+            <Text style={[r.rowMeta, own.pace]}>
+              ON THIS PACE ≈ {moneyShort(data.projectedMonthly, currency)}/MONTH
+            </Text>
+          </>
+        )}
+      </Receipt>
+
+      {data.recentEntries.length > 0 && (
+        <Receipt>
+          <Text style={own.sheetTitle}>RECENT</Text>
+          <DottedRule />
+          {data.recentEntries.map((entry) => (
+            <ReceiptRow
+              key={entry.id}
+              label={entry.itemName.toUpperCase()}
+              meta={`${quantityWithUnit(entry.quantity, entry.unit)} · ${entry.reasonLabel}`}
+              amount={money(entry.totalCostLost, currency)}
+            />
+          ))}
+          <DottedRule />
+          <Pressable accessibilityRole="button" onPress={() => router.push('/history')}>
+            <Text style={own.seeAll}>SEE ALL ENTRIES ▸</Text>
+          </Pressable>
+        </Receipt>
       )}
     </Screen>
   );
 }
 
+/**
+ * Stable colour per reason so the ring and its legend always agree. Every hue sits between
+ * 20 and 90 degrees to match the paper, and the brightness values are spread so neighbouring
+ * arcs stay distinguishable without relying on hue alone.
+ */
+function useReasonColors() {
+  const t = useTheme();
+  return useMemo(() => {
+    const light: Record<WasteReason, string> = {
+      OVER_PREPPED: '#54682F',
+      EXPIRED_SPOILED: '#B07C22',
+      BURNED_DAMAGED: '#A8552F',
+      TRIM_PREP: '#8C8F5C',
+      CUSTOMER_RETURN: '#C9B784',
+      OTHER: '#A8A492',
+    };
+    const dark: Record<WasteReason, string> = {
+      OVER_PREPPED: '#93A860',
+      EXPIRED_SPOILED: '#D6A44F',
+      BURNED_DAMAGED: '#D08560',
+      TRIM_PREP: '#A9AC78',
+      CUSTOMER_RETURN: '#E0D3A6',
+      OTHER: '#8A8676',
+    };
+    const map = t.scheme === 'dark' ? dark : light;
+    return (reason: WasteReason) => map[reason] ?? t.colors.inkFaint;
+  }, [t]);
+}
+
 function useOwnStyles() {
   const t = useTheme();
-  return React.useMemo(
+  return useMemo(
     () =>
       StyleSheet.create({
         weekBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        weekLabelWrap: { alignItems: 'center', gap: 1 },
-        weekLabel: { ...t.text.subhead, color: t.colors.ink },
-        weekRange: { ...t.text.caption, color: t.colors.inkMuted, ...tabular },
-        stepper: {
-          width: 40,
-          height: 40,
-          borderRadius: t.radius.pill,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: t.colors.surface,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: t.colors.hairline,
+        step: { paddingHorizontal: t.space.md, paddingVertical: 4 },
+        stepGlyph: { fontFamily: mono, fontSize: 11, color: t.colors.inkMuted },
+        weekWord: { fontFamily: mono, fontSize: 11, letterSpacing: 1.6, color: t.colors.inkMuted },
+        toggleWrap: { paddingVertical: t.space.sm },
+        pace: { textAlign: 'center', paddingTop: t.space.sm, letterSpacing: 0.5 },
+        sheetTitle: {
+          fontFamily: mono,
+          fontSize: 11,
+          fontWeight: '700',
+          letterSpacing: 2,
+          color: t.colors.inkMuted,
+          textAlign: 'center',
         },
-        stepperOff: { opacity: 0.3 },
-        stepperGlyph: { fontSize: 20, lineHeight: 24, color: t.colors.inkMuted },
-
-        hero: { paddingHorizontal: t.space.xl, paddingVertical: t.space.xl, gap: t.space.xs },
-        heroLabel: { ...t.text.label, color: t.colors.onBrandMuted },
-        heroValue: { ...t.text.display, color: t.colors.onBrand, ...tabular, marginTop: t.space.xs },
-        heroFooter: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, marginTop: t.space.sm },
-        trend: { paddingHorizontal: t.space.sm, paddingVertical: 3, borderRadius: t.radius.sm },
-        trendUp: { backgroundColor: 'rgba(230, 129, 104, 0.22)' },
-        trendDown: { backgroundColor: 'rgba(107, 184, 147, 0.22)' },
-        trendText: { ...t.text.caption, fontWeight: '700', ...tabular },
-        trendTextUp: { color: '#F3B4A3' },
-        trendTextDown: { color: '#9EDCBC' },
-        heroMeta: { ...t.text.caption, color: t.colors.onBrandMuted },
-        heroRule: {
-          height: StyleSheet.hairlineWidth,
-          backgroundColor: 'rgba(255,255,255,0.16)',
-          marginVertical: t.space.lg,
+        seeAll: {
+          fontFamily: mono,
+          fontSize: 11,
+          letterSpacing: 1.2,
+          color: t.colors.brand,
+          textAlign: 'center',
+          paddingVertical: 4,
         },
-        heroProjection: { ...t.text.body, color: t.colors.onBrandMuted },
-        heroProjectionStrong: { color: t.colors.onBrand, fontWeight: '600', ...tabular },
-
-        footnote: { ...t.text.caption, color: t.colors.inkFaint, paddingHorizontal: t.space.xs },
-        link: { ...t.text.label, color: t.colors.brand },
       }),
     [t],
   );

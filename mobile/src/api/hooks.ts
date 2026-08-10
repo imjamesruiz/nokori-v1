@@ -11,8 +11,10 @@ import type {
   DashboardSummary,
   InventoryItem,
   ItemCategory,
+  ItemCostPoint,
   ItemUnit,
   Page,
+  ReasonSlice,
   WasteEntry,
   WasteReason,
   WeeklyReport,
@@ -42,6 +44,8 @@ function invalidateWasteViews(queryClient: ReturnType<typeof useQueryClient>) {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
     queryClient.invalidateQueries({ queryKey: ['history'] }),
     queryClient.invalidateQueries({ queryKey: ['report'] }),
+    queryClient.invalidateQueries({ queryKey: ['topItems'] }),
+    queryClient.invalidateQueries({ queryKey: ['byReason'] }),
   ]);
 }
 
@@ -135,6 +139,22 @@ export function useDashboard(weeksAgo: number) {
   return useQuery({
     queryKey: queryKeys.dashboard(weeksAgo),
     queryFn: () => api<DashboardSummary>('/dashboard/summary', { query: { weeksAgo } }),
+  });
+}
+
+/** Powers the receipt's itemised lines. */
+export function useTopItems(weeksAgo: number, limit = 8) {
+  return useQuery({
+    queryKey: ['topItems', weeksAgo, limit] as const,
+    queryFn: () => api<ItemCostPoint[]>('/dashboard/top-items', { query: { weeksAgo, limit } }),
+  });
+}
+
+/** Powers the ring: where the money went, by reason. */
+export function useByReason(weeksAgo: number) {
+  return useQuery({
+    queryKey: ['byReason', weeksAgo] as const,
+    queryFn: () => api<ReasonSlice[]>('/dashboard/by-reason', { query: { weeksAgo } }),
   });
 }
 

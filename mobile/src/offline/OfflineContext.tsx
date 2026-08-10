@@ -44,6 +44,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
           queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
           queryClient.invalidateQueries({ queryKey: ['history'] }),
           queryClient.invalidateQueries({ queryKey: ['report'] }),
+          queryClient.invalidateQueries({ queryKey: ['topItems'] }),
+          queryClient.invalidateQueries({ queryKey: ['byReason'] }),
         ]);
       }
     } finally {

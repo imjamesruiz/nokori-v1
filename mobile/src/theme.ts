@@ -1,4 +1,4 @@
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 /**
  * Nokori's design language.
@@ -10,67 +10,72 @@ import { useColorScheme } from 'react-native';
  */
 
 const brand = {
-  green: '#2F6B4F',
-  greenDeep: '#1E4634',
-  greenLift: '#4E9A75',
+  /**
+   * Olive rather than the PRD's blue-green #2F6B4F. The interface is warm receipt stock
+   * (~44 deg), and a cool green (~152 deg) pulled against every other hue on screen. Moving
+   * the green to ~85 deg puts the whole palette in one family.
+   */
+  olive: '#54682F',
+  oliveDeep: '#3B4A1F',
+  oliveLift: '#93A860',
 } as const;
 
 export const palette = {
   light: {
-    // A barely-warm paper rather than a mint tint, so white surfaces read as clean, not cold.
-    canvas: '#F5F6F3',
-    surface: '#FFFFFF',
-    surfaceSunken: '#EFF1EE',
-    surfaceInverse: brand.greenDeep,
+    // Kraft stock: the paper a ticket is actually printed on.
+    canvas: '#F1ECDF',
+    surface: '#FAF6EC',
+    surfaceSunken: '#E8E1D0',
+    surfaceInverse: brand.oliveDeep,
 
-    ink: '#16201B',
-    inkMuted: '#65726B',
-    inkFaint: '#94A09A',
-    onBrand: '#FFFFFF',
-    onBrandMuted: '#BFD8C9',
+    ink: '#26261C',
+    inkMuted: '#6B6A57',
+    inkFaint: '#9A9581',
+    onBrand: '#FAF6EC',
+    onBrandMuted: '#C8CFAC',
 
-    brand: brand.green,
-    brandPressed: brand.greenDeep,
-    brandTint: '#E7F0EA',
+    brand: brand.olive,
+    brandPressed: brand.oliveDeep,
+    brandTint: '#E7EBD6',
 
     // Waste going up is bad news; down is good. Colour carries that, not just an arrow.
-    up: '#C6533B',
-    upTint: '#FBEAE5',
-    down: '#2F6B4F',
-    downTint: '#E7F0EA',
-    warning: '#B87A2B',
-    warningTint: '#FBF0DF',
+    up: '#A8552F',
+    upTint: '#F7E4D9',
+    down: brand.olive,
+    downTint: '#E7EBD6',
+    warning: '#B07C22',
+    warningTint: '#F8ECD5',
 
-    hairline: 'rgba(22, 32, 27, 0.08)',
-    hairlineStrong: 'rgba(22, 32, 27, 0.14)',
-    shadow: 'rgba(22, 32, 27, 0.10)',
-    scrim: 'rgba(22, 32, 27, 0.45)',
+    hairline: 'rgba(38, 38, 28, 0.14)',
+    hairlineStrong: 'rgba(38, 38, 28, 0.30)',
+    shadow: 'rgba(38, 38, 28, 0.13)',
+    scrim: 'rgba(38, 38, 28, 0.45)',
   },
   dark: {
-    canvas: '#0F1411',
-    surface: '#181F1A',
-    surfaceSunken: '#131916',
-    surfaceInverse: '#20342A',
+    canvas: '#14130E',
+    surface: '#1D1B14',
+    surfaceSunken: '#191710',
+    surfaceInverse: '#2A3119',
 
-    ink: '#E9EFEA',
-    inkMuted: '#9BA8A0',
-    inkFaint: '#6E7B74',
-    onBrand: '#FFFFFF',
-    onBrandMuted: '#B6D2C2',
+    ink: '#EDE8D9',
+    inkMuted: '#A39E8B',
+    inkFaint: '#75705F',
+    onBrand: '#14130E',
+    onBrandMuted: '#C8CFAC',
 
-    brand: brand.greenLift,
-    brandPressed: '#3F8763',
-    brandTint: '#1B2C23',
+    brand: brand.oliveLift,
+    brandPressed: '#77894C',
+    brandTint: '#232817',
 
-    up: '#E68168',
-    upTint: '#2E1E1A',
-    down: '#6BB893',
-    downTint: '#16281F',
-    warning: '#E0A458',
-    warningTint: '#2A2115',
+    up: '#D08560',
+    upTint: '#2C1D14',
+    down: brand.oliveLift,
+    downTint: '#1F2415',
+    warning: '#D6A44F',
+    warningTint: '#2A2213',
 
-    hairline: 'rgba(233, 239, 234, 0.10)',
-    hairlineStrong: 'rgba(233, 239, 234, 0.18)',
+    hairline: 'rgba(237, 232, 217, 0.16)',
+    hairlineStrong: 'rgba(237, 232, 217, 0.34)',
     shadow: 'rgba(0, 0, 0, 0.55)',
     scrim: 'rgba(0, 0, 0, 0.6)',
   },
@@ -104,14 +109,24 @@ export const radius = {
  */
 export const tabular = { fontVariant: ['tabular-nums' as const] };
 
+/**
+ * Figures and receipt rows are set in monospace — the voice of a printed ticket, and it makes
+ * every amount align by construction. Item names and chrome stay in the system sans.
+ */
+export const mono = Platform.select({
+  ios: 'Menlo',
+  android: 'monospace',
+  default: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+}) as string;
+
 export const text = {
   // Reserved for the single headline number on a screen.
   display: { fontSize: 44, lineHeight: 48, fontWeight: '700' as const, letterSpacing: -1.6 },
   title: { fontSize: 28, lineHeight: 34, fontWeight: '700' as const, letterSpacing: -0.6 },
   heading: { fontSize: 20, lineHeight: 26, fontWeight: '700' as const, letterSpacing: -0.3 },
   subhead: { fontSize: 17, lineHeight: 22, fontWeight: '600' as const, letterSpacing: -0.2 },
-  body: { fontSize: 15, lineHeight: 21, fontWeight: '400' as const },
-  bodyStrong: { fontSize: 15, lineHeight: 21, fontWeight: '600' as const },
+  body: { fontSize: 16, lineHeight: 23, fontWeight: '400' as const },
+  bodyStrong: { fontSize: 16, lineHeight: 23, fontWeight: '600' as const },
   // Sentence case, muted — the old all-caps labels shouted over the data they described.
   label: { fontSize: 13, lineHeight: 18, fontWeight: '600' as const },
   caption: { fontSize: 12, lineHeight: 16, fontWeight: '400' as const },
@@ -128,10 +143,20 @@ export const elevation = {
   lifted: {
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 1,
-    shadowRadius: 20,
+    shadowRadius: 16,
     elevation: 8,
   },
 } as const;
+
+/** Widened so the light and flat (dark) elevation sets share one assignable shape. */
+export type Elevation = {
+  [K in keyof typeof elevation]: {
+    shadowOffset: { width: number; height: number };
+    shadowOpacity: number;
+    shadowRadius: number;
+    elevation: number;
+  };
+};
 
 export interface Theme {
   colors: Colors;
@@ -139,10 +164,26 @@ export interface Theme {
   space: typeof space;
   radius: typeof radius;
   text: typeof text;
-  elevation: typeof elevation;
+  elevation: Elevation;
 }
+
+/**
+ * Dark interfaces separate layers by surface brightness, not shadow — a shadow on a dark
+ * background reads as smudge. Depth there comes from `surface` being lighter than `canvas`.
+ */
+const flatElevation = {
+  card: { ...elevation.card, shadowOpacity: 0, elevation: 0 },
+  lifted: { ...elevation.lifted, shadowOpacity: 0, elevation: 0 },
+} as const;
 
 export function useTheme(): Theme {
   const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
-  return { colors: palette[scheme], scheme, space, radius, text, elevation };
+  return {
+    colors: palette[scheme],
+    scheme,
+    space,
+    radius,
+    text,
+    elevation: scheme === 'dark' ? flatElevation : elevation,
+  };
 }
