@@ -4,9 +4,10 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Platform, StyleSheet, Text, View } from 'react-native';
 
 import { API_BASE_URL, ApiError, fetchCsv } from '@/api/client';
+import { useAppearance, type AppearancePreference } from '@/appearance';
 import { useBusiness } from '@/api/hooks';
 import { useAuth } from '@/auth/AuthContext';
-import { Banner, Button, Card, Loading, Row, Screen, Section } from '@/components/ui';
+import { Banner, Button, Card, ChipRow, Loading, Row, Screen, Section } from '@/components/ui';
 import { titleCase } from '@/format';
 import { useTheme } from '@/theme';
 
@@ -15,6 +16,7 @@ export default function Settings() {
   const { data: business, isLoading } = useBusiness();
   const [status, setStatus] = useState<{ tone: 'error' | 'success'; message: string } | null>(null);
   const [busy, setBusy] = useState<'export' | 'delete' | null>(null);
+  const { preference, setPreference } = useAppearance();
   const own = useOwnStyles();
 
   async function exportCsv() {
@@ -103,6 +105,21 @@ export default function Settings() {
         </Card>
         <Text style={own.note}>
           Your timezone decides where each week starts and ends — Monday 00:00 to Sunday 23:59.
+        </Text>
+      </Section>
+
+      <Section title="Appearance">
+        <ChipRow<AppearancePreference>
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          value={preference}
+          onChange={setPreference}
+        />
+        <Text style={own.note}>
+          System follows your phone's light/dark setting. Choose Light or Dark to override it.
         </Text>
       </Section>
 

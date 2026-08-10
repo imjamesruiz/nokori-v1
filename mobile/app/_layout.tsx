@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { AppearanceProvider } from '@/appearance';
 import { AuthProvider } from '@/auth/AuthContext';
 import { OfflineProvider } from '@/offline/OfflineContext';
 import { useTheme } from '@/theme';
@@ -25,13 +26,15 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
+      <AppearanceProvider>
+        <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <OfflineProvider>
             <Navigation />
           </OfflineProvider>
         </AuthProvider>
-      </QueryClientProvider>
+        </QueryClientProvider>
+      </AppearanceProvider>
     </SafeAreaProvider>
   );
 }

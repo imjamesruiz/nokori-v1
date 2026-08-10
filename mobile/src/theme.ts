@@ -1,5 +1,7 @@
 import { Platform, useColorScheme } from 'react-native';
 
+import { useAppearance } from './appearance';
+
 /**
  * Nokori's design language.
  *
@@ -177,7 +179,11 @@ const flatElevation = {
 } as const;
 
 export function useTheme(): Theme {
-  const scheme = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const system = useColorScheme();
+  const { preference } = useAppearance();
+  // An explicit choice wins; 'system' follows the OS.
+  const scheme =
+    preference === 'system' ? (system === 'dark' ? 'dark' : 'light') : preference;
   return {
     colors: palette[scheme],
     scheme,
