@@ -2,11 +2,12 @@ import React, { useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useDeleteEntry, useHistory, useInventory, type HistoryFilter } from '@/api/hooks';
-import { WASTE_REASONS, type WasteReason } from '@/api/types';
+import { WASTE_REASONS, type WasteEntry, type WasteReason } from '@/api/types';
 import { SyncBanner } from '@/components/SyncBanner';
-import { Card, EmptyState, Loading, Screen, useStyles } from '@/components/ui';
+import { DottedRule, Receipt, ReceiptRow, ReceiptTotal } from '@/components/receipt';
+import { EmptyState, Loading, Screen } from '@/components/ui';
 import { money, quantityWithUnit, shortDate, weekdayShort } from '@/format';
-import { tabular, useTheme } from '@/theme';
+import { mono, useTheme } from '@/theme';
 
 type Range = 'week' | 'lastWeek' | 'month' | 'all';
 
@@ -38,13 +39,12 @@ function rangeToFilter(range: Range): Pick<HistoryFilter, 'from' | 'to'> {
   }
 }
 
-/** Waste history (PRD F-006): filters that scroll sideways, then a dense scannable list. */
+/** Waste history (PRD F-006) printed by day, the way a till roll reads back. */
 export default function History() {
   const [range, setRange] = useState<Range>('week');
   const [reason, setReason] = useState<WasteReason | undefined>();
   const [itemId, setItemId] = useState<string | undefined>();
   const t = useTheme();
-  const s = useStyles(t);
   const own = useOwnStyles();
 
   const filter = useMemo<HistoryFilter>(
@@ -58,6 +58,17 @@ export default function History() {
 
   const entries = data?.content ?? [];
   const total = entries.reduce((sum, entry) => sum + entry.totalCostLost, 0);
+
+  // Entries arrive newest first; grouping preserves that order within each day.
+  const days = useMemo(() => {
+    const map = new Map<string, WasteEntry[]>();
+    for (const entry of entries) {
+      const bucket = map.get(entry.wasteDate);
+      if (bucket) bucket.push(entry);
+      else map.set(entry.wasteDate, [entry]);
+    }
+    return [...map.entries()];
+  }, [entries]);
 
   function confirmDelete(id: string, label: string) {
     const run = () => void deleteEntry.mutateAsync(id);
@@ -82,24 +93,27 @@ export default function History() {
       <View style={own.filters}>
         <FilterStrip
           options={[
-            { value: 'week', label: 'This week' },
-            { value: 'lastWeek', label: 'Last week' },
-            { value: 'month', label: '30 days' },
-            { value: 'all', label: 'All time' },
+            { value: 'week', label: 'THIS WEEK' },
+            { value: 'lastWeek', label: 'LAST WEEK' },
+            { value: 'month', label: '30 DAYS' },
+            { value: 'all', label: 'ALL TIME' },
           ]}
           value={range}
           onChange={(v) => setRange(v as Range)}
         />
         <FilterStrip
-          options={[{ value: '', label: 'Any reason' }, ...WASTE_REASONS]}
+          options={[
+            { value: '', label: 'ANY REASON' },
+            ...WASTE_REASONS.map((r) => ({ value: r.value as string, label: r.label.toUpperCase() })),
+          ]}
           value={reason ?? ''}
           onChange={(v) => setReason(v === '' ? undefined : (v as WasteReason))}
         />
         {!!items && items.length > 0 && (
           <FilterStrip
             options={[
-              { value: '', label: 'Any item' },
-              ...items.map((item) => ({ value: item.id, label: item.name })),
+              { value: '', label: 'ANY ITEM' },
+              ...items.map((item) => ({ value: item.id, label: item.name.toUpperCase() })),
             ]}
             value={itemId ?? ''}
             onChange={(v) => setItemId(v === '' ? undefined : v)}
@@ -112,41 +126,31 @@ export default function History() {
       ) : entries.length === 0 ? (
         <EmptyState title="Nothing here" body="No entries match these filters." />
       ) : (
-        <>
-          <View style={own.summary}>
-            <Text style={own.summaryLabel}>
-              {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
-            </Text>
-            <Text style={own.summaryValue}>{money(total)}</Text>
-          </View>
+        <Receipt torn>
+          {days.map(([date, dayEntries], index) => (
+            <View key={date}>
+              {index > 0 && <DottedRule />}
+              <Text style={own.dayHeader}>
+                {weekdayShort(date).toUpperCase()} · {shortDate(date).toUpperCase()}
+              </Text>
+              {dayEntries.map((entry) => (
+                <ReceiptRow
+                  key={entry.id}
+                  label={entry.itemName.toUpperCase()}
+                  meta={`${quantityWithUnit(entry.quantity, entry.unit)} · ${entry.reasonLabel}${entry.note ? ` · ${entry.note}` : ''}`}
+                  amount={money(entry.totalCostLost)}
+                  onLongPress={() => confirmDelete(entry.id, entry.itemName)}
+                />
+              ))}
+            </View>
+          ))}
 
-          <Card>
-            {entries.map((entry, index) => (
-              <Pressable
-                key={entry.id}
-                onLongPress={() => confirmDelete(entry.id, entry.itemName)}
-                style={({ pressed }) => [own.row, index > 0 && own.rowDivided, pressed && s.pressed]}>
-                <View style={own.date}>
-                  <Text style={own.dateDay}>{weekdayShort(entry.wasteDate)}</Text>
-                  <Text style={own.dateNum}>{shortDate(entry.wasteDate)}</Text>
-                </View>
-                <View style={own.main}>
-                  <Text style={own.name}>{entry.itemName}</Text>
-                  <Text style={own.meta}>
-                    {quantityWithUnit(entry.quantity, entry.unit)} · {entry.reasonLabel}
-                  </Text>
-                  {!!entry.note && (
-                    <Text style={own.note} numberOfLines={2}>
-                      {entry.note}
-                    </Text>
-                  )}
-                </View>
-                <Text style={own.cost}>{money(entry.totalCostLost)}</Text>
-              </Pressable>
-            ))}
-          </Card>
-          <Text style={own.hint}>Long-press an entry to delete it.</Text>
-        </>
+          <ReceiptTotal
+            label={`${entries.length} ${entries.length === 1 ? 'ENTRY' : 'ENTRIES'}`}
+            amount={money(total)}
+          />
+          <Text style={own.hint}>LONG-PRESS AN ENTRY TO DELETE</Text>
+        </Receipt>
       )}
     </Screen>
   );
@@ -173,8 +177,12 @@ function FilterStrip({
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             onPress={() => onChange(option.value)}
-            style={[own.pill, selected && { backgroundColor: t.colors.brand, borderColor: t.colors.brand }]}>
-            <Text style={[own.pillText, selected && { color: t.colors.onBrand, fontWeight: '600' }]}>
+            style={[
+              own.pill,
+              selected && { backgroundColor: t.colors.brand, borderColor: t.colors.brand },
+            ]}>
+            <Text
+              style={[own.pillText, selected && { color: t.colors.onBrand, fontWeight: '700' }]}>
               {option.label}
             </Text>
           </Pressable>
@@ -198,37 +206,28 @@ function useOwnStyles() {
           borderWidth: StyleSheet.hairlineWidth,
           borderColor: t.colors.hairlineStrong,
           backgroundColor: t.colors.surface,
-          minHeight: 36,
+          minHeight: 34,
           justifyContent: 'center',
         },
-        pillText: { ...t.text.caption, color: t.colors.ink },
+        pillText: { fontFamily: mono, fontSize: 10.5, letterSpacing: 0.5, color: t.colors.ink },
 
-        summary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-        summaryLabel: { ...t.text.body, color: t.colors.inkMuted },
-        summaryValue: { ...t.text.title, color: t.colors.ink, ...tabular },
-
-        row: {
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: t.space.md,
-          paddingVertical: t.space.md,
+        dayHeader: {
+          fontFamily: mono,
+          fontSize: 10.5,
+          fontWeight: '700',
+          letterSpacing: 1.6,
+          color: t.colors.inkFaint,
+          paddingTop: t.space.sm,
+          paddingBottom: 2,
         },
-        rowDivided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.hairline },
-        date: {
-          width: 46,
-          alignItems: 'center',
-          paddingVertical: t.space.xs,
-          borderRadius: t.radius.sm,
-          backgroundColor: t.colors.surfaceSunken,
+        hint: {
+          fontFamily: mono,
+          fontSize: 9.5,
+          letterSpacing: 0.6,
+          color: t.colors.inkFaint,
+          textAlign: 'center',
+          paddingTop: t.space.md,
         },
-        dateDay: { ...t.text.caption, color: t.colors.inkMuted, fontWeight: '600' },
-        dateNum: { ...t.text.caption, color: t.colors.inkFaint, ...tabular },
-        main: { flex: 1, gap: 1 },
-        name: { ...t.text.bodyStrong, color: t.colors.ink },
-        meta: { ...t.text.caption, color: t.colors.inkMuted },
-        note: { ...t.text.caption, color: t.colors.inkFaint, fontStyle: 'italic' },
-        cost: { ...t.text.subhead, color: t.colors.ink, ...tabular },
-        hint: { ...t.text.caption, color: t.colors.inkFaint, textAlign: 'center' },
       }),
     [t],
   );

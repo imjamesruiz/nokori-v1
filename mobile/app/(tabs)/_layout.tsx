@@ -55,7 +55,9 @@ export default function TabsLayout() {
           name={tab.name}
           options={{
             title: tab.title,
-            headerShown: tab.name !== 'index',
+            // Home and Report print their own header on the receipt; a nav bar above it
+            // would just repeat the title.
+            headerShown: tab.name !== 'index' && tab.name !== 'report',
             tabBarIcon: ({ color, focused }) => (
               <Ionicons name={focused ? tab.iconActive : tab.icon} color={color} size={22} />
             ),

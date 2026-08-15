@@ -2,133 +2,167 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, View } from 'react-native';
 
 import { useWeeklyReport } from '@/api/hooks';
-import { BarRow, Card, EmptyState, Loading, Metric, Screen, Section, useStyles } from '@/components/ui';
+import {
+  DottedRule,
+  Receipt,
+  ReceiptHeader,
+  ReceiptRow,
+  ReceiptTotal,
+  RingChart,
+  Stamp,
+  ViewToggle,
+  useReasonColors,
+} from '@/components/receipt';
+import { EmptyState, Loading, Screen } from '@/components/ui';
 import { dateRange, money } from '@/format';
-import { tabular, useTheme } from '@/theme';
+import { mono, useTheme } from '@/theme';
 
-/** Weekly report (PRD F-007): the recommendation leads, the evidence follows. */
+type Mode = 'items' | 'reasons' | 'days';
+
+/**
+ * Weekly report (PRD F-007) printed as a ticket. The recommendation is stamped at the top
+ * because it is the one line in the product worth acting on; the evidence follows underneath.
+ */
 export default function Report() {
   const [weeksAgo, setWeeksAgo] = useState(1);
+  const [mode, setMode] = useState<Mode>('items');
   const { data, isLoading, refetch, isRefetching } = useWeeklyReport(weeksAgo);
   const t = useTheme();
-  const s = useStyles(t);
   const own = useOwnStyles();
+  const reasonColor = useReasonColors();
 
-  if (isLoading) return <Loading label="Building your report…" />;
+  if (isLoading) return <Loading label="Printing your report…" />;
   if (!data) return null;
 
-  const maxItemCost = Math.max(...data.topItems.map((i) => i.cost), 0);
-  const maxDayCost = Math.max(...data.byDay.map((d) => d.cost), 0);
   const change = data.changePercent;
   const wasteRose = change !== undefined && change !== null && change > 0;
+  const maxDay = Math.max(...data.byDay.map((d) => d.cost), 0);
+
+  const slices = data.byReason
+    .filter((slice) => slice.cost > 0)
+    .map((slice) => ({
+      key: slice.reason,
+      label: `${slice.label}  ${money(slice.cost, data.currency)}`,
+      value: slice.cost,
+      color: reasonColor(slice.reason),
+    }));
 
   return (
-    <Screen refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />}>
-      <View style={own.weekBar}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Earlier week"
-          onPress={() => setWeeksAgo((w) => Math.min(w + 1, 12))}
-          style={({ pressed }) => [own.stepper, pressed && s.pressed]}>
-          <Text style={own.stepperGlyph}>‹</Text>
-        </Pressable>
-        <Text style={own.weekRange}>{dateRange(data.weekStart, data.weekEnd)}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Later week"
-          onPress={() => setWeeksAgo((w) => Math.max(w - 1, 0))}
-          disabled={weeksAgo === 0}
-          style={({ pressed }) => [own.stepper, weeksAgo === 0 && own.stepperOff, pressed && s.pressed]}>
-          <Text style={own.stepperGlyph}>›</Text>
-        </Pressable>
-      </View>
-
-      {data.entryCount === 0 ? (
-        <EmptyState
-          title="No entries that week"
-          body="Weeks with nothing logged stay empty — Nokori never guesses numbers you didn't record."
+    <Screen
+      refreshControl={
+        <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={t.colors.inkFaint} />
+      }>
+      <Receipt torn>
+        <ReceiptHeader
+          title="W E E K L Y   R E P O R T"
+          subtitle={dateRange(data.weekStart, data.weekEnd).toUpperCase()}
         />
-      ) : (
-        <>
-          {/* The single most valuable sentence in the product gets the loudest surface. */}
-          <View style={own.advice}>
-            <Text style={own.adviceLabel}>Do this next</Text>
-            <Text style={own.adviceText}>{data.recommendation.text}</Text>
-          </View>
 
-          <Card style={own.totalCard}>
-            <Text style={own.totalLabel}>Total wasted</Text>
-            <Text style={own.totalValue}>{money(data.totalCost, data.currency)}</Text>
-            {change !== undefined && change !== null ? (
-              <Text style={own.totalChange}>
-                <Text style={{ color: wasteRose ? t.colors.up : t.colors.down, fontWeight: '700' }}>
-                  {wasteRose ? '↑' : '↓'} {Math.abs(change)}%
-                </Text>
-                {`  vs. ${money(data.previousTotalCost, data.currency)} the week before`}
-              </Text>
-            ) : (
-              <Text style={own.totalChange}>No comparison week yet</Text>
-            )}
-            <View style={own.metrics}>
-              <Metric label="Entries" value={String(data.entryCount)} />
-              <Metric label="Top reason" value={data.topReasonLabel ?? '—'} />
-              <Metric label="Worst day" value={data.worstDay ?? '—'} />
+        <View style={own.weekBar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Earlier week"
+            onPress={() => setWeeksAgo((w) => Math.min(w + 1, 12))}
+            style={({ pressed }) => [own.step, pressed && { opacity: 0.5 }]}>
+            <Text style={own.stepGlyph}>◀</Text>
+          </Pressable>
+          <Text style={own.weekWord}>{data.fromSnapshot ? 'CLOSED' : 'STILL OPEN'}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Later week"
+            onPress={() => setWeeksAgo((w) => Math.max(w - 1, 0))}
+            disabled={weeksAgo === 0}
+            style={({ pressed }) => [
+              own.step,
+              weeksAgo === 0 && { opacity: 0.25 },
+              pressed && { opacity: 0.5 },
+            ]}>
+            <Text style={own.stepGlyph}>▶</Text>
+          </Pressable>
+        </View>
+
+        <DottedRule />
+
+        {data.entryCount === 0 ? (
+          <EmptyState
+            title="No entries that week"
+            body="Weeks with nothing logged stay empty — Nokori never guesses numbers you didn't record."
+          />
+        ) : (
+          <>
+            <View style={own.stampWrap}>
+              <Stamp label="DO THIS NEXT">{data.recommendation.text}</Stamp>
             </View>
-          </Card>
 
-          <Section title="Where the money went">
-            <Card>
-              {data.topItems.map((item, index) => (
-                <BarRow
+            <View style={own.toggleWrap}>
+              <ViewToggle
+                options={[
+                  { value: 'items' as const, label: 'ITEMS' },
+                  { value: 'reasons' as const, label: 'REASONS' },
+                  { value: 'days' as const, label: 'DAYS' },
+                ]}
+                value={mode}
+                onChange={setMode}
+              />
+            </View>
+
+            {mode === 'items' &&
+              data.topItems.map((item) => (
+                <ReceiptRow
                   key={item.itemId}
-                  first={index === 0}
-                  label={item.name}
-                  value={item.cost}
-                  max={maxItemCost}
-                  caption={money(item.cost, data.currency)}
+                  label={item.name.toUpperCase()}
+                  meta={`${item.entryCount} ${item.entryCount === 1 ? 'entry' : 'entries'}`}
+                  amount={money(item.cost, data.currency)}
                 />
               ))}
-            </Card>
-          </Section>
 
-          <Section title="By day">
-            <Card>
-              {data.byDay.map((day, index) => (
-                <BarRow
-                  key={day.date}
-                  first={index === 0}
-                  label={day.label}
-                  value={day.cost}
-                  max={maxDayCost}
-                  caption={money(day.cost, data.currency)}
-                  tone="warning"
-                />
+            {mode === 'reasons' && (
+              <RingChart
+                slices={slices}
+                centerValue={money(data.totalCost, data.currency)}
+                centerLabel={`${data.entryCount} entries`}
+              />
+            )}
+
+            {mode === 'days' &&
+              data.byDay.map((day) => (
+                <View key={day.date} style={own.dayRow}>
+                  <Text style={own.dayLabel}>{day.label.slice(0, 3).toUpperCase()}</Text>
+                  <View style={own.dayTrack}>
+                    <View
+                      style={[
+                        own.dayFill,
+                        { width: `${maxDay > 0 ? Math.max(2, (day.cost / maxDay) * 100) : 0}%` },
+                      ]}
+                    />
+                  </View>
+                  <Text style={own.dayAmount}>{money(day.cost, data.currency)}</Text>
+                </View>
               ))}
-            </Card>
-          </Section>
 
-          <Section title="By reason">
-            <Card>
-              {data.byReason.map((slice, index) => (
-                <BarRow
-                  key={slice.reason}
-                  first={index === 0}
-                  label={slice.label}
-                  value={slice.cost}
-                  max={data.totalCost}
-                  caption={`${money(slice.cost, data.currency)} · ${Math.round(slice.share * 100)}%`}
-                />
-              ))}
-            </Card>
-          </Section>
+            <DottedRule />
+            <ReceiptRow label="ENTRIES" amount={String(data.entryCount)} muted />
+            <ReceiptRow label="TOP REASON" amount={data.topReasonLabel ?? '—'} muted />
+            <ReceiptRow label="WORST DAY" amount={data.worstDay ?? '—'} muted />
 
-          <Text style={own.footnote}>
-            {data.fromSnapshot
-              ? 'This week is closed — its headline numbers are frozen as you first read them.'
-              : 'This week is still open, so these numbers move as you log.'}
-          </Text>
-        </>
-      )}
+            <ReceiptTotal
+              label="TOTAL WASTED"
+              amount={money(data.totalCost, data.currency)}
+              note={
+                change !== undefined && change !== null
+                  ? `${wasteRose ? '▲' : '▼'} ${Math.abs(change)}% vs. ${money(data.previousTotalCost, data.currency)} the week before`
+                  : 'No comparison week yet'
+              }
+            />
+
+            <Text style={own.footnote}>
+              {data.fromSnapshot
+                ? '* WEEK CLOSED — FIGURES FROZEN AS FIRST READ'
+                : '* WEEK STILL OPEN — FIGURES MOVE AS YOU LOG'}
+            </Text>
+          </>
+        )}
+      </Receipt>
     </Screen>
   );
 }
@@ -139,45 +173,39 @@ function useOwnStyles() {
     () =>
       StyleSheet.create({
         weekBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-        weekRange: { ...t.text.subhead, color: t.colors.ink, ...tabular },
-        stepper: {
-          width: 40,
-          height: 40,
-          borderRadius: t.radius.pill,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: t.colors.surface,
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: t.colors.hairline,
-        },
-        stepperOff: { opacity: 0.3 },
-        stepperGlyph: { fontSize: 20, lineHeight: 24, color: t.colors.inkMuted },
+        step: { paddingHorizontal: t.space.md, paddingVertical: 4 },
+        stepGlyph: { fontFamily: mono, fontSize: 11, color: t.colors.inkMuted },
+        weekWord: { fontFamily: mono, fontSize: 11, letterSpacing: 1.6, color: t.colors.inkMuted },
 
-        advice: {
-          backgroundColor: t.colors.warningTint,
-          borderRadius: t.radius.lg,
-          padding: t.space.xl,
-          gap: t.space.sm,
-          borderLeftWidth: 3,
-          borderLeftColor: t.colors.warning,
-        },
-        adviceLabel: { ...t.text.label, color: t.colors.warning },
-        adviceText: { ...t.text.title, color: t.colors.ink, fontSize: 22, lineHeight: 30 },
+        stampWrap: { paddingVertical: t.space.md },
+        toggleWrap: { paddingBottom: t.space.md },
 
-        totalCard: { paddingHorizontal: t.space.xl, paddingVertical: t.space.xl, gap: t.space.xs },
-        totalLabel: { ...t.text.label, color: t.colors.inkMuted },
-        totalValue: { ...t.text.display, color: t.colors.ink, ...tabular },
-        totalChange: { ...t.text.caption, color: t.colors.inkMuted, marginTop: t.space.xs },
-        metrics: {
-          flexDirection: 'row',
-          gap: t.space.md,
-          marginTop: t.space.lg,
-          paddingTop: t.space.lg,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: t.colors.hairline,
+        dayRow: { flexDirection: 'row', alignItems: 'center', gap: t.space.sm, paddingVertical: 5 },
+        dayLabel: { fontFamily: mono, fontSize: 11, color: t.colors.inkMuted, width: 34 },
+        dayTrack: {
+          flex: 1,
+          height: 10,
+          backgroundColor: t.colors.surfaceSunken,
+          borderRadius: 2,
+          overflow: 'hidden',
+        },
+        dayFill: { height: 10, backgroundColor: t.colors.brand, borderRadius: 2 },
+        dayAmount: {
+          fontFamily: mono,
+          fontSize: 11.5,
+          color: t.colors.ink,
+          width: 62,
+          textAlign: 'right',
         },
 
-        footnote: { ...t.text.caption, color: t.colors.inkFaint, textAlign: 'center' },
+        footnote: {
+          fontFamily: mono,
+          fontSize: 10,
+          color: t.colors.inkFaint,
+          textAlign: 'center',
+          paddingTop: t.space.md,
+          letterSpacing: 0.4,
+        },
       }),
     [t],
   );

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Svg, { Circle, G, Path, Text as SvgText } from 'react-native-svg';
 
+import type { WasteReason } from '@/api/types';
 import { mono, tabular, useTheme } from '@/theme';
 
 /* ------------------------------------------------------------------ paper */
@@ -260,6 +261,35 @@ export function ViewToggle<T extends string>({
       })}
     </View>
   );
+}
+
+/**
+ * Stable colour per reason so the ring and its legend always agree. Every hue sits between
+ * 20 and 90 degrees to match the paper, and the brightness values are spread so neighbouring
+ * arcs stay distinguishable without relying on hue alone.
+ */
+export function useReasonColors() {
+  const t = useTheme();
+  return useMemo(() => {
+    const light: Record<WasteReason, string> = {
+      OVER_PREPPED: '#54682F',
+      EXPIRED_SPOILED: '#B07C22',
+      BURNED_DAMAGED: '#A8552F',
+      TRIM_PREP: '#8C8F5C',
+      CUSTOMER_RETURN: '#C9B784',
+      OTHER: '#A8A492',
+    };
+    const dark: Record<WasteReason, string> = {
+      OVER_PREPPED: '#93A860',
+      EXPIRED_SPOILED: '#D6A44F',
+      BURNED_DAMAGED: '#D08560',
+      TRIM_PREP: '#A9AC78',
+      CUSTOMER_RETURN: '#E0D3A6',
+      OTHER: '#8A8676',
+    };
+    const map = t.scheme === 'dark' ? dark : light;
+    return (reason: WasteReason) => map[reason] ?? t.colors.inkFaint;
+  }, [t]);
 }
 
 /* ----------------------------------------------------------------- styles */
